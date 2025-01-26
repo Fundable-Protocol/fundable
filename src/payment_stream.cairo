@@ -105,9 +105,12 @@ mod PaymentStream {
             cancelable: bool,
             token: ContractAddress,
         ) -> u256 {
+            let current_time = get_block_timestamp();
             // Validate inputs
             assert(!recipient.is_zero(), 'Invalid recipient');
             assert(total_amount > 0, 'Amount must be > 0');
+            assert(start_time >= current_time, 'Invalid_start_time');
+            assert(end_time > current_time, 'Invalid_end_time');
             assert(end_time > start_time, 'End time before start time');
             assert(!token.is_zero(), 'Invalid token address');
 

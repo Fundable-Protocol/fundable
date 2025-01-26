@@ -1,13 +1,16 @@
 use core::traits::Into;
-use starknet::{ContractAddress, contract_address_const};
+use starknet::{get_block_timestamp, ContractAddress, contract_address_const};
 use snforge_std::{
     declare, ContractClassTrait, DeclareResultTrait, start_cheat_caller_address,
     stop_cheat_caller_address, start_cheat_caller_address_global, stop_cheat_caller_address_global
 };
-use fundable::interfaces::IDistributor::{IDistributorDispatcher, IDistributorDispatcherTrait};
+use fundable::interfaces::{
+    IDistributor::{IDistributorDispatcher, IDistributorDispatcherTrait},
+    IPaymentStream::{IPaymentStreamDispatcher, IPaymentStreamDispatcherTrait}
+};
 use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
 
-fn setup() -> (ContractAddress, ContractAddress, IDistributorDispatcher) {
+fn setup() -> (ContractAddress, ContractAddress, IDistributorDispatcher, IPaymentStreamDispatcher) {
     let sender: ContractAddress = contract_address_const::<'sender'>();
     // Deploy mock ERC20
     let erc20_class = declare("MockUsdc").unwrap().contract_class();
@@ -18,12 +21,20 @@ fn setup() -> (ContractAddress, ContractAddress, IDistributorDispatcher) {
     let distributor_class = declare("Distributor").unwrap().contract_class();
     let (distributor_address, _) = distributor_class.deploy(@array![]).unwrap();
 
-    (erc20_address, sender, IDistributorDispatcher { contract_address: distributor_address })
+    let payment_stream_class = declare("PaymentStream").unwrap().contract_class();
+    let (payment_stream_address, _) = payment_stream_class.deploy(@array![]).unwrap();
+
+    (
+        erc20_address,
+        sender,
+        IDistributorDispatcher { contract_address: distributor_address },
+        IPaymentStreamDispatcher { contract_address: payment_stream_address }
+    )
 }
 
 #[test]
 fn test_successful_distribution() {
-    let (token_address, sender, distributor) = setup();
+    let (token_address, sender, distributor, _) = setup();
     let token = IERC20Dispatcher { contract_address: token_address };
 
     // Create recipients array
@@ -69,7 +80,7 @@ fn test_successful_distribution() {
 #[test]
 #[should_panic(expected: ('Recipients array is empty',))]
 fn test_empty_recipients() {
-    let (token_address, sender, distributor) = setup();
+    let (token_address, sender, distributor, _) = setup();
     let recipients = array![];
 
     start_cheat_caller_address(distributor.contract_address, sender);
@@ -80,7 +91,7 @@ fn test_empty_recipients() {
 #[test]
 #[should_panic(expected: ('Amount must be greater than 0',))]
 fn test_zero_amount() {
-    let (token_address, sender, distributor) = setup();
+    let (token_address, sender, distributor, _) = setup();
     let recipients = array![contract_address_const::<0x2>()];
 
     start_cheat_caller_address(distributor.contract_address, sender);
@@ -90,7 +101,7 @@ fn test_zero_amount() {
 
 #[test]
 fn test_weighted_distribution() {
-    let (token_address, sender, distributor) = setup();
+    let (token_address, sender, distributor, _) = setup();
     let token = IERC20Dispatcher { contract_address: token_address };
 
     // Create recipients array
@@ -140,7 +151,7 @@ fn test_weighted_distribution() {
 #[test]
 #[should_panic(expected: ('Arrays length mismatch',))]
 fn test_weighted_distribution_mismatched_arrays() {
-    let (token_address, sender, distributor) = setup();
+    let (token_address, sender, distributor, _) = setup();
 
     // Create unequal length arrays
     let recipients = array![contract_address_const::<0x2>(), contract_address_const::<0x3>()];
@@ -154,7 +165,7 @@ fn test_weighted_distribution_mismatched_arrays() {
 #[test]
 #[should_panic(expected: ('Amount must be greater than 0',))]
 fn test_weighted_distribution_zero_amount() {
-    let (token_address, sender, distributor) = setup();
+    let (token_address, sender, distributor, _) = setup();
 
     let recipients = array![contract_address_const::<0x2>()];
     let amounts = array![0_u256];
@@ -290,4 +301,112 @@ fn test_weighted_distribution_zero_amount() {
 //     assert(events.is_empty(), 'Should not emit events');
 // }
 
+#[test]
+fn test_successful_create_stream() {
+    let (token_address, _sender, _distributor, payment_stream) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 1000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+
+    let stream_id = payment_stream
+        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address,);
+
+    assert!(stream_id > 0_u256, "Stream creation failed");
+}
+
+#[test]
+#[should_panic(expected: 'End time before start time')]
+fn test_invalid_end_time() {
+    let (token_address, _sender, _, payment_stream) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 1000_u256;
+    let start_time = 100_u64;
+    let end_time = 50_u64;
+    let cancelable = true;
+
+    payment_stream
+        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address,);
+}
+
+#[test]
+#[should_panic(expected: 'Invalid recipient')]
+fn test_zero_recipient_address() {
+    let (token_address, _sender, _, payment_stream) = setup();
+    let recipient = contract_address_const::<0x0>(); // Invalid zero address
+    let total_amount = 1000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+
+    payment_stream
+        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address,);
+}
+
+#[test]
+#[should_panic(expected: 'Invalid token address')]
+fn test_zero_token_address() {
+    let (_token_address, _sender, _, payment_stream) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 1000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+
+    payment_stream
+        .create_stream(
+            recipient,
+            total_amount,
+            start_time,
+            end_time,
+            cancelable,
+            contract_address_const::<0x0>(),
+        );
+}
+
+#[test]
+#[should_panic(expected: 'Amount must be > 0')]
+fn test_zero_total_amount() {
+    let (token_address, _sender, _, payment_stream) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 0_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+
+    payment_stream
+        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address,);
+}
+
+#[test]
+#[should_panic(expected: 'Invalid_start_time')]
+fn test_start_time_in_past() {
+    let (token_address, _sender, _, payment_stream) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 1000_u256;
+    let current_time = get_block_timestamp();
+    let start_time = current_time - 10;
+    let end_time = current_time + 100;
+    let cancelable = true;
+
+    payment_stream
+        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address,);
+}
+
+#[test]
+fn test_valid_future_start_time() {
+    let (token_address, _sender, _, payment_stream) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 1000_u256;
+    let current_time = get_block_timestamp();
+    let start_time = current_time + 100;
+    let end_time = start_time + 200;
+    let cancelable = true;
+
+    let stream_id = payment_stream
+        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address,);
+
+    assert!(stream_id > 0_u256, "Stream creation failed");
+}
 
