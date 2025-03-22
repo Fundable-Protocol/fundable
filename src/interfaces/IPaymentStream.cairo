@@ -16,7 +16,7 @@ pub trait IPaymentStream<TContractState> {
     /// @return The ID of the newly created stream
     fn create_stream(
         ref self: TContractState,
-        recipient: ContractAddress,
+        initial_owner: ContractAddress,
         total_amount: u256,
         start_time: u64,
         end_time: u64,

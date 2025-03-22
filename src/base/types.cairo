@@ -5,7 +5,6 @@ use starknet::ContractAddress;
 #[derive(Drop, Serde, starknet::Store)]
 pub struct Stream {
     pub sender: ContractAddress,
-    pub recipient: ContractAddress,
     pub total_amount: u256,
     pub withdrawn_amount: u256,
     pub start_time: u64,
