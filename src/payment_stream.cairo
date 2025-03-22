@@ -506,6 +506,75 @@ mod PaymentStream {
             self.emit(StreamVoided { stream_id });
         }
 
+        fn refund(ref self: ContractState, stream_id: u256, amount: u256) -> bool {
+            // Read the stream data from storage
+            let mut stream = self.streams.read(stream_id);
+
+            //  // Ensure the caller Owner of the stream
+            assert((get_caller_address() == stream.sender), 'Not your stream');
+
+            // Check if the stream has been canceled before allowing a refund
+            assert(stream.status == StreamStatus::Active, 'Stream is still active');
+
+            // Ensure the stream exists before proceeding
+            self.assert_stream_exists(stream_id);
+
+            // Ensure the requested refund amount does not exceed the available balance
+            assert(
+                amount <= (stream.total_amount - stream.withdrawn_amount), 'Insufficient Balance',
+            );
+
+            // Update stream Time
+            stream.end_time = get_block_timestamp();
+
+            let recipient = stream.sender;
+
+            // Process the withdrawal to refund the specified amount to the contract address
+            self.withdraw(stream_id, amount, recipient);
+
+            // Indicate that the refund was successful
+            true
+        }
+
+
+        fn refund_max(ref self: ContractState, stream_id: u256) -> bool {
+            // Read the stream data from storage
+            let mut stream = self.streams.read(stream_id);
+
+            // Check if the stream has been canceled before allowing a refund
+            assert(stream.status == StreamStatus::Active, 'Stream is still active');
+
+            // Calculate the maximum refundable amount
+            let amount: u256 = stream.total_amount - stream.withdrawn_amount;
+
+            // Refund the maximum available amount from the stream
+            self.refund(stream_id, amount);
+
+            // Indicate that the refund operation was successful
+            true
+        }
+
+        fn refund_and_pause(ref self: ContractState, stream_id: u256, amount: u256) -> bool {
+            // Read the stream data from storage
+            let mut stream = self.streams.read(stream_id);
+
+            // Check if the stream has been canceled before allowing a refund
+            assert(stream.status == StreamStatus::Active, 'Stream is still active');
+
+            // Calculate the maximum refundable amount
+            let amount: u256 = stream.total_amount - stream.withdrawn_amount;
+
+            // Refund the maximum available amount from the stream
+            self.refund(stream_id, amount);
+
+            // Pause Stream
+            self.pause(stream_id);
+
+            // Indicate that the refund was successful
+            true
+        }
+
+
         fn get_stream(self: @ContractState, stream_id: u256) -> Stream {
             // Return dummy stream
             // Stream {

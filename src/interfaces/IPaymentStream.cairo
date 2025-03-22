@@ -164,4 +164,20 @@ pub trait IPaymentStream<TContractState> {
     fn update_stream_rate(
         ref self: TContractState, stream_id: u256, new_rate_per_second: UFixedPoint123x128,
     );
+    /// @notice Refunds a specified amount from a stream
+    /// @param stream_id The ID of the stream from which to refund
+    /// @param amount The amount to refund from the stream
+    /// @return Boolean indicating if the refund was successful
+    fn refund(ref self: TContractState, stream_id: u256, amount: u256) -> bool;
+
+    /// @notice Refunds the maximum possible amount from a stream
+    /// @param stream_id The ID of the stream from which to refund
+    /// @return The maximum refundable amount from the stream
+    fn refund_max(ref self: TContractState, stream_id: u256) -> bool;
+
+    /// @notice Refunds a specified amount from a stream and pauses the stream
+    /// @param stream_id The ID of the stream from which to refund
+    /// @param amount The amount to refund from the stream
+    /// @return Boolean indicating if the refund and pause operation was successful
+    fn refund_and_pause(ref self: TContractState, stream_id: u256, amount: u256) -> bool;
 }
