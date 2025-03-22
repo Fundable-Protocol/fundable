@@ -32,6 +32,13 @@ pub mod Errors {
     /// Thrown when attempting to create a stream where the end time is before the start time
     pub const END_BEFORE_START: felt252 = 'Error: End time < start time.';
 
+    /// Thrown when a too low duration is provided.
+    pub const TOO_SHORT_DURATION: felt252 = 'Error: Duration is too short';
+
+
+    /// Thrown when token decimals > 18
+    pub const DECIMALS_TOO_HIGH: felt252 = 'Error: Decimals too high.';
+
     /// Thrown when a protocol address is not set
     pub const PROTOCOL_FEE_ADDRESS_NOT_SET: felt252 = 'Error: Zero Protocol address';
 

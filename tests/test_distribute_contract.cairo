@@ -19,7 +19,7 @@ fn setup() -> (ContractAddress, ContractAddress, IDistributorDispatcher) {
     let sender: ContractAddress = contract_address_const::<'sender'>();
     // Deploy mock ERC20
     let erc20_class = declare("MockUsdc").unwrap().contract_class();
-    let mut calldata = array![sender.into(), sender.into()];
+    let mut calldata = array![sender.into(), sender.into(), 6];
     let (erc20_address, _) = erc20_class.deploy(@calldata).unwrap();
 
     // Deploy distributor contract

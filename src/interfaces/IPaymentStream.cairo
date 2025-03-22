@@ -128,6 +128,11 @@ pub trait IPaymentStream<TContractState> {
     /// @return The count of active streams in the protocol
     fn get_active_streams_count(self: @TContractState) -> u256;
 
+    /// @notice Returns the token decimals
+    /// @params stream_id The unique identifier of the stream
+    /// @return Token decimals
+    fn get_token_decimals(self: @TContractState, stream_id: u256) -> u8;
+
     /// @notice Returns the total amount distributed for a specific token
     /// @param token The contract address of the token to query
     /// @return Total amount distributed for the specified token
