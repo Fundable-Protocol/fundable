@@ -21,8 +21,8 @@ mod PaymentStream {
     };
     use crate::base::errors::Errors::{
         DECIMALS_TOO_HIGH, END_BEFORE_START, INSUFFICIENT_ALLOWANCE, INVALID_RECIPIENT,
-        INVALID_TOKEN, TOO_SHORT_DURATION, UNEXISTING_STREAM, WRONG_RECIPIENT,
-        WRONG_RECIPIENT_OR_DELEGATE, WRONG_SENDER, ZERO_AMOUNT,
+        INVALID_TOKEN, NON_TRANSFERABLE_STREAM, TOO_SHORT_DURATION, UNEXISTING_STREAM,
+        WRONG_RECIPIENT, WRONG_RECIPIENT_OR_DELEGATE, WRONG_SENDER, ZERO_AMOUNT,
     };
     use crate::base::types::{ProtocolMetrics, Stream, StreamMetrics, StreamStatus};
 
@@ -88,6 +88,8 @@ mod PaymentStream {
         AccessControlEvent: AccessControlComponent::Event,
         DelegationGranted: DelegationGranted,
         DelegationRevoked: DelegationRevoked,
+        StreamTransferabilitySet: StreamTransferabilitySet,
+        StreamTransferred: StreamTransferred,
         ProtocolFeeSet: ProtocolFeeSet,
         ProtocolRevenueCollected: ProtocolRevenueCollected,
     }
@@ -124,6 +126,7 @@ mod PaymentStream {
         recipient: ContractAddress,
         total_amount: u256,
         token: ContractAddress,
+        transferable: bool,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -178,6 +181,18 @@ mod PaymentStream {
     }
 
     #[derive(Drop, starknet::Event)]
+    struct StreamTransferabilitySet {
+        #[key]
+        stream_id: u256,
+        transferable: bool,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct StreamTransferred {
+        #[key]
+        stream_id: u256,
+        new_recipient: ContractAddress,
+    }
     struct ProtocolFeeSet {
         #[key]
         token: ContractAddress,
@@ -211,6 +226,11 @@ mod PaymentStream {
         fn assert_is_sender(self: @ContractState, stream_id: u256) {
             let stream = self.streams.read(stream_id);
             assert(get_caller_address() == stream.sender, WRONG_SENDER);
+        }
+
+        fn assert_is_transferable(self: @ContractState, stream_id: u256) {
+            let stream = self.streams.read(stream_id);
+            assert(stream.transferable, NON_TRANSFERABLE_STREAM);
         }
 
         fn calculate_stream_rate(
@@ -264,6 +284,7 @@ mod PaymentStream {
             end_time: u64,
             cancelable: bool,
             token: ContractAddress,
+            transferable: bool,
         ) -> u256 {
             assert(!recipient.is_zero(), INVALID_RECIPIENT);
             assert(total_amount > 0, ZERO_AMOUNT);
@@ -295,6 +316,7 @@ mod PaymentStream {
                 status: StreamStatus::Active,
                 rate_per_second,
                 last_update_time: start_time,
+                transferable,
             };
 
             self.accesscontrol._grant_role(STREAM_ADMIN_ROLE, stream.sender);
@@ -320,9 +342,10 @@ mod PaymentStream {
                         StreamCreated {
                             stream_id,
                             sender: get_caller_address(),
-                            recipient: recipient,
+                            recipient,
                             total_amount,
                             token,
+                            transferable,
                         },
                     ),
                 );
@@ -330,6 +353,62 @@ mod PaymentStream {
             stream_id
         }
 
+        fn transfer_stream(
+            ref self: ContractState, stream_id: u256, new_recipient: ContractAddress,
+        ) {
+            // Verify stream exists
+            self.assert_stream_exists(stream_id);
+
+            // Verify the caller is the stream owner (sender)
+            self.assert_is_sender(stream_id);
+
+            // Verify the stream is transferable
+            self.assert_is_transferable(stream_id);
+
+            // Verify valid new recipient
+            assert(new_recipient.is_non_zero(), INVALID_RECIPIENT);
+
+            // Get current stream details
+            let mut stream = self.streams.read(stream_id);
+
+            // Update recipient
+            stream.recipient = new_recipient;
+
+            // Save updated stream
+            self.streams.write(stream_id, stream);
+
+            // Emit event about stream transfer
+            self.emit(StreamTransferred { stream_id, new_recipient });
+        }
+
+        fn set_transferability(ref self: ContractState, stream_id: u256, transferable: bool) {
+            // Verify stream exists
+            self.assert_stream_exists(stream_id);
+
+            // Verify the caller is the stream owner (sender)
+            self.assert_is_sender(stream_id);
+
+            // Get current stream details
+            let mut stream = self.streams.read(stream_id);
+
+            // Update transferability if it's different from current setting
+            if stream.transferable != transferable {
+                stream.transferable = transferable;
+            }
+            // Save updated stream
+            self.streams.write(stream_id, stream);
+
+            // Emit event about transferability change
+            self.emit(StreamTransferabilitySet { stream_id, transferable });
+        }
+
+        fn is_transferable(self: @ContractState, stream_id: u256) -> bool {
+            // Get stream details
+            let stream = self.streams.read(stream_id);
+
+            // Return transferability status
+            stream.transferable
+        }
 
         fn withdraw(
             ref self: ContractState, stream_id: u256, amount: u256, to: ContractAddress,
@@ -752,6 +831,7 @@ mod PaymentStream {
                 cancelable: stream.cancelable,
                 status: stream.status,
                 last_update_time: starknet::get_block_timestamp(),
+                transferable: stream.transferable,
             };
 
             self.streams.write(stream_id, new_stream);
@@ -824,14 +904,6 @@ mod PaymentStream {
         fn is_voided(self: @ContractState, stream_id: u256) -> bool {
             let stream: Stream = self.streams.read(stream_id);
             if stream.status == StreamStatus::Voided {
-                return true;
-            }
-            false
-        }
-
-        fn is_transferable(self: @ContractState, stream_id: u256) -> bool {
-            let stream: Stream = self.streams.read(stream_id);
-            if stream.total_amount >= 0 {
                 return true;
             }
             false

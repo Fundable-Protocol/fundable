@@ -122,15 +122,15 @@ fn test_nft_metadata() {
 #[test]
 fn test_successful_create_stream() {
     let (token_address, _sender, payment_stream, erc721) = setup();
-    let initial_owner = contract_address_const::<0x2>();
+    let recipient = contract_address_const::<0x2>();
     let total_amount = 1000_u256;
     let start_time = 100_u64;
     let end_time = 200_u64;
     let cancelable = true;
-
+    let transferable = true; // Corrected spelling from tranferable to transferable
     let stream_id = payment_stream
         .create_stream(
-            initial_owner, total_amount, start_time, end_time, cancelable, token_address,
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
         );
     println!("Stream ID: {}", stream_id);
 
@@ -143,15 +143,16 @@ fn test_successful_create_stream() {
 #[should_panic(expected: 'Error: End time < start time.')]
 fn test_invalid_end_time() {
     let (token_address, _sender, payment_stream, _erc721) = setup();
-    let initial_owner = contract_address_const::<0x2>();
+    let recipient = contract_address_const::<0x2>();
     let total_amount = 1000_u256;
     let start_time = 100_u64;
     let end_time = 50_u64;
     let cancelable = true;
+    let transferable = true; // Added transferable boolean
 
     payment_stream
         .create_stream(
-            initial_owner, total_amount, start_time, end_time, cancelable, token_address,
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
         );
 }
 
@@ -159,15 +160,16 @@ fn test_invalid_end_time() {
 #[should_panic(expected: 'Error: Invalid recipient.')]
 fn test_zero_recipient_address() {
     let (token_address, _sender, payment_stream, _erc721) = setup();
-    let initial_owner = contract_address_const::<0x0>(); // Invalid ro address
+    let recipient = contract_address_const::<0x0>(); // Invalid ro address
     let total_amount = 1000_u256;
     let start_time = 100_u64;
     let end_time = 200_u64;
     let cancelable = true;
+    let transferable = true; // Added transferable boolean
 
     payment_stream
         .create_stream(
-            initial_owner, total_amount, start_time, end_time, cancelable, token_address,
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
         );
 }
 
@@ -180,6 +182,7 @@ fn test_zero_token_address() {
     let start_time = 100_u64;
     let end_time = 200_u64;
     let cancelable = true;
+    let transferable = true; // Added transferable boolean
 
     payment_stream
         .create_stream(
@@ -189,6 +192,7 @@ fn test_zero_token_address() {
             end_time,
             cancelable,
             contract_address_const::<0x0>(),
+            transferable,
         );
 }
 #[test]
@@ -200,9 +204,12 @@ fn test_zero_total_amount() {
     let start_time = 100_u64;
     let end_time = 200_u64;
     let cancelable = true;
+    let transferable = true;
 
     payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
 }
 
 #[test]
@@ -213,9 +220,12 @@ fn test_successful_create_stream_and_return_correct_rate_per_second() {
     let start_time = 0_u64;
     let end_time = 10_u64;
     let cancelable = false;
+    let transferable = true;
 
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
     let stream = payment_stream.get_stream(stream_id);
     let rate_per_second: UFixedPoint123x128 = 10_u256.into();
     assert!(stream.rate_per_second == rate_per_second, "Stream rate per second is invalid");
@@ -229,9 +239,12 @@ fn test_successful_create_stream_and_return_wrong_rate_per_second() {
     let start_time = 0_u64;
     let end_time = 10_u64;
     let cancelable = false;
+    let transferable = true;
 
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
     let stream = payment_stream.get_stream(stream_id);
     let rate_per_second: UFixedPoint123x128 = 1_u256.into();
     assert!(stream.rate_per_second == rate_per_second, "Stream rate per second is invalid");
@@ -246,9 +259,12 @@ fn test_update_stream_with_zero_rate_per_second() {
     let start_time = 0_u64;
     let end_time = 10_u64;
     let cancelable = false;
+    let transferable = true;
 
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
     let rate_per_second: UFixedPoint123x128 = 0_u256.into();
     payment_stream.update_stream_rate(stream_id, rate_per_second);
     stop_cheat_caller_address(payment_stream.contract_address);
@@ -264,14 +280,16 @@ fn test_only_creator_can_update_stream() {
     let start_time = 0_u64;
     let end_time = 10_u64;
     let cancelable = false;
+    let transferable = true;
 
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
     payment_stream.delegate_stream(stream_id, contract_address_const::<0x1>());
     stop_cheat_caller_address(payment_stream.contract_address);
     let rate_per_second: UFixedPoint123x128 = 1_u256.into();
 
-    // Unauthorized account to update stream.
     start_cheat_caller_address(payment_stream.contract_address, unauthorized);
     payment_stream.update_stream_rate(stream_id, rate_per_second);
     stop_cheat_caller_address(payment_stream.contract_address);
@@ -318,8 +336,9 @@ fn test_withdraw() {
 
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
-    // Sender assigns a delegate.
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     payment_stream.delegate_stream(stream_id, delegate);
     stop_cheat_caller_address(payment_stream.contract_address);
 
@@ -327,7 +346,6 @@ fn test_withdraw() {
     let sender_initial_balance = token_dispatcher.balance_of(sender);
     println!("Initial balance of sender: {}", sender_initial_balance);
 
-    // Simulate delegate's approval:
     start_cheat_caller_address(token_address, delegate);
     token_dispatcher.approve(payment_stream.contract_address, total_amount);
     stop_cheat_caller_address(token_address);
@@ -368,7 +386,9 @@ fn test_successful_stream_cancellation() {
     stop_cheat_caller_address(payment_stream.contract_address);
 
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     println!("Stream ID: {}", stream_id);
 
     // This is the first Stream Created, so it will be 0.
@@ -377,7 +397,7 @@ fn test_successful_stream_cancellation() {
     payment_stream.cancel(stream_id);
     let get_let = payment_stream.is_stream_active(stream_id);
 
-    assert(get_let == false, 'Cancelation failed');
+    assert(!get_let, 'Cancelation failed');
 }
 
 #[test]
@@ -397,8 +417,9 @@ fn test_withdraw_by_delegate() {
     // Sender creates a stream.
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
-    // Sender assigns a delegate.
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     payment_stream.delegate_stream(stream_id, delegate);
     stop_cheat_caller_address(payment_stream.contract_address);
 
@@ -437,7 +458,9 @@ fn test_withdraw_by_unauthorized() {
     // Sender creates a stream.
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        ); // Added transferable boolean
     stop_cheat_caller_address(payment_stream.contract_address);
 
     // Unauthorized account attempts withdrawal.
@@ -459,7 +482,9 @@ fn test_unauthorized_cancel() {
     // Create a stream as the sender - this will automatically assign STREAM_ADMIN_ROLE
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        ); // Added transferable boolean
 
     // Verify that the sender has the STREAM_ADMIN_ROLE after creating the stream
     let has_role = access_control.has_role(STREAM_ADMIN_ROLE, sender);
@@ -490,7 +515,9 @@ fn test_pause_stream() {
     // Create a stream
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        ); // Added transferable boolean
 
     // Pause the stream
     payment_stream.pause(stream_id);
@@ -513,7 +540,9 @@ fn test_restart_stream() {
     // Create a stream
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        ); // Added transferable boolean
 
     // Pause the stream first
     payment_stream.pause(stream_id);
@@ -544,7 +573,9 @@ fn test_void_stream() {
     // Create a stream
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        ); // Added transferable boolean
 
     // Void the stream
     payment_stream.void(stream_id);
@@ -569,7 +600,9 @@ fn test_delegate_assignment_and_verification() {
     // Create stream
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        ); // Added transferable boolean
 
     // Assign delegate
     let delegation_success = payment_stream.delegate_stream(stream_id, delegate);
@@ -596,7 +629,9 @@ fn test_multiple_delegations() {
     // Create stream
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        ); // Added transferable boolean
 
     // Assign first delegate
     payment_stream.delegate_stream(stream_id, delegate1);
@@ -624,7 +659,9 @@ fn test_delegation_revocation() {
     // Create stream and assign delegate
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        ); // Added transferable boolean
     payment_stream.delegate_stream(stream_id, delegate);
 
     // Verify delegate is assigned
@@ -657,7 +694,9 @@ fn test_unauthorized_delegation() {
     // Create stream as sender
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        ); // Added transferable boolean
     stop_cheat_caller_address(payment_stream.contract_address);
 
     // Try to delegate from unauthorized address
@@ -680,7 +719,9 @@ fn test_revoke_nonexistent_delegation() {
     // Create stream
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        ); // Added transferable boolean
 
     // Try to revoke non-existent delegation
     payment_stream.revoke_delegation(stream_id);
@@ -709,7 +750,9 @@ fn test_delegate_withdrawal_after_revocation() {
 
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        ); // Added transferable boolean
 
     // Assign and then revoke delegate
     payment_stream.delegate_stream(stream_id, delegate);
@@ -743,7 +786,10 @@ fn test_delegate_to_zero_address() {
     // Create stream
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        ); // Added transferable boolean
+
     // Try to delegate to zero address
     payment_stream.delegate_stream(stream_id, contract_address_const::<0x0>());
     stop_cheat_caller_address(payment_stream.contract_address);
@@ -1077,14 +1123,7 @@ fn test_six_decimals_store() {
     let (token_address, sender, payment_stream) = setup_custom_decimals(test_decimals);
 
     let stream_id = payment_stream
-        .create_stream(
-            sender, // recipient
-            1000000_u256, // amount (1 token in 6 decimals)
-            100_u64, // start_time
-            200_u64, // end_time
-            true, // cancelable
-            token_address // token with 6 decimals
-        );
+        .create_stream(sender, 1000000_u256, 100_u64, 200_u64, true, token_address, true);
 
     let stored_decimals = payment_stream.get_token_decimals(stream_id);
     assert(stored_decimals == test_decimals, 'Decimals not stored correctly');
@@ -1100,12 +1139,13 @@ fn test_zero_decimals() {
 
     let stream_id = payment_stream
         .create_stream(
-            sender, // recipient
-            100_u256, // 100 tokens (0 decimals)
-            100_u64, // start_time
-            200_u64, // end_time
-            true, // cancelable
+            sender,
+            100_u256,
+            100_u64,
+            200_u64,
+            true,
             token_address,
+            true // Added transferable boolean
         );
 
     let stored_decimals = payment_stream.get_token_decimals(stream_id);
@@ -1122,8 +1162,13 @@ fn test_eighteen_decimals() {
 
     let stream_id = payment_stream
         .create_stream(
-            sender, 1000000000000000000_u256, // 1 token
-            100_u64, 200_u64, true, token_address,
+            sender,
+            1000000000000000000_u256, // 1 token
+            100_u64,
+            200_u64,
+            true,
+            token_address,
+            true // Added transferable boolean
         );
 
     let stored_decimals = payment_stream.get_token_decimals(stream_id);
@@ -1138,7 +1183,9 @@ fn test_nineteen_decimals_panic() {
 
     // should panic because decimals > 18
     payment_stream
-        .create_stream(sender, 10000000000000000000_u256, 100_u64, 200_u64, true, token_address);
+        .create_stream(
+            sender, 10000000000000000000_u256, 100_u64, 200_u64, true, token_address, true,
+        ); // Added transferable boolean
 }
 
 #[test]
@@ -1152,7 +1199,8 @@ fn test_decimal_boundary_conditions() {
             100_u64, // start_time
             200_u64, // end_time
             true, // cancelable
-            token18 // token address
+            token18, // token address
+            true // Added transferable boolean
         );
     assert(ps18.get_token_decimals(stream_id18) == 18, 'Max decimals failed');
 
@@ -1165,11 +1213,77 @@ fn test_decimal_boundary_conditions() {
             100_u64, // start_time
             200_u64, // end_time
             true, // cancelable
-            token0 // token address
+            token0, // token address
+            true // Added transferable boolean
         );
     assert(ps0.get_token_decimals(stream_id0) == 0, 'Min decimals failed');
 }
 
+// New tests for the added functions
+#[test]
+fn test_transfer_stream() {
+    let (token_address, sender, payment_stream) = setup();
+    let recipient = contract_address_const::<'recipient'>();
+    let total_amount = 10000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+    let transferable = true;
+
+    start_cheat_caller_address(payment_stream.contract_address, sender);
+    let stream_id = payment_stream
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+
+    let new_recipient = contract_address_const::<'new_recipient'>();
+    payment_stream.transfer_stream(stream_id, new_recipient);
+
+    let stream = payment_stream.get_stream(stream_id);
+    assert(stream.recipient == new_recipient, 'Recipient update error');
+}
+
+#[test]
+fn test_set_transferability() {
+    let (token_address, sender, payment_stream) = setup();
+    let recipient = contract_address_const::<'recipient'>();
+    let total_amount = 10000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+    let transferable = true;
+
+    start_cheat_caller_address(payment_stream.contract_address, sender);
+    let stream_id = payment_stream
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+
+    payment_stream.set_transferability(stream_id, false);
+
+    let stream = payment_stream.get_stream(stream_id);
+    assert(!stream.transferable, 'Transferability setting error');
+}
+
+#[test]
+fn test_is_transferable() {
+    let (token_address, sender, payment_stream) = setup();
+    let recipient = contract_address_const::<'recipient'>();
+    let total_amount = 10000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+    let transferable = true;
+
+    start_cheat_caller_address(payment_stream.contract_address, sender);
+    let stream_id = payment_stream
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+
+    let is_transferable = payment_stream.is_transferable(stream_id);
+    assert(is_transferable, 'Stream should be transferable');
+}
 
 #[test]
 fn test_set_protocol_fee_successful() {

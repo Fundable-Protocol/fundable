@@ -13,6 +13,7 @@ pub trait IPaymentStream<TContractState> {
     /// @param end_time The timestamp when the stream ends
     /// @param cancelable Boolean indicating if the stream can be canceled
     /// @param token The contract address of the ERC-20 token to be streamed
+    /// @param transferable Boolean indicating if the stream can be transferred
     /// @return The ID of the newly created stream
     fn create_stream(
         ref self: TContractState,
@@ -22,6 +23,7 @@ pub trait IPaymentStream<TContractState> {
         end_time: u64,
         cancelable: bool,
         token: ContractAddress,
+        transferable: bool,
     ) -> u256;
 
     /// @notice Withdraws the provided amount minus the protocol fee to the provided address
@@ -150,7 +152,7 @@ pub trait IPaymentStream<TContractState> {
     /// @notice Delegate a contract address to a stream
     /// @param stream_id The stream ID for the query
     /// @param delegate The address to delegate a stream to
-    /// @return Boolean indicating if the stream delegation is successsful
+    /// @return Boolean indicating if the stream delegation is successful
     fn delegate_stream(
         ref self: TContractState, stream_id: u256, delegate: ContractAddress,
     ) -> bool;
@@ -170,6 +172,20 @@ pub trait IPaymentStream<TContractState> {
         ref self: TContractState, stream_id: u256, new_rate_per_second: UFixedPoint123x128,
     );
 
+    /// @notice Transfers the stream to a new recipient
+    /// @param stream_id The ID of the stream to transfer
+    /// @param new_recipient The address of the new recipient
+    fn transfer_stream(ref self: TContractState, stream_id: u256, new_recipient: ContractAddress);
+
+    /// @notice Sets the transferability of the stream
+    /// @param stream_id The ID of the stream to update
+    /// @param transferable Boolean indicating if the stream can be transferred
+    fn set_transferability(ref self: TContractState, stream_id: u256, transferable: bool);
+
+    /// @notice Checks if the stream is transferable
+    /// @param stream_id The ID of the stream to check
+    /// @return Boolean indicating if the stream is transferable
+    fn is_transferable(self: @TContractState, stream_id: u256) -> bool;
     /// @notice Gets the protocol fee of the token
     /// @param token The ContractAddress of the token
     /// @return u256 The fee of the token
@@ -205,11 +221,6 @@ pub trait IPaymentStream<TContractState> {
     /// @param stream_id The ID of the stream
     /// @return Boolean indicating if the stream is voided or not
     fn is_voided(self: @TContractState, stream_id: u256) -> bool;
-
-    /// @notice Check if a stream is transferable
-    /// @param stream_id The ID of the stream
-    /// @return Boolean indicating if the stream is transferable
-    fn is_transferable(self: @TContractState, stream_id: u256) -> bool;
 
 
     /// @notice gets sender of the stream
