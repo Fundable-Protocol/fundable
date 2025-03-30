@@ -1,8 +1,5 @@
 use core::num::traits::Bounded;
 use core::traits::Into;
-use fundable::base::types::{
-    Distribution, DistributionHistory, TokenStats, UserStats, WeightedDistribution,
-};
 use fundable::interfaces::IDistributor::{IDistributorDispatcher, IDistributorDispatcherTrait};
 //use fundable::interfaces::IERC20::{IERC20Dispatcher, IERC20DispatcherTrait};
 use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};

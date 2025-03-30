@@ -18,9 +18,10 @@ mod PaymentStream {
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use crate::base::errors::Errors::{
         DECIMALS_TOO_HIGH, END_BEFORE_START, INSUFFICIENT_ALLOWANCE, INVALID_RECIPIENT,
-        INVALID_TOKEN, TOO_SHORT_DURATION, UNEXISTING_STREAM, WRONG_RECIPIENT_OR_DELEGATE,
+        INVALID_TOKEN, OVERDRAW, TOO_SHORT_DURATION, UNEXISTING_STREAM, WRONG_RECIPIENT_OR_DELEGATE,
         WRONG_SENDER, ZERO_AMOUNT,
     };
+    use crate::base::helpers::Helpers;
     use crate::base::types::{ProtocolMetrics, Stream, StreamMetrics, StreamStatus};
 
     component!(path: AccessControlComponent, storage: accesscontrol, event: AccessControlEvent);
@@ -276,8 +277,7 @@ mod PaymentStream {
             assert(duration >= 1, TOO_SHORT_DURATION);
             let rate_per_second = self.calculate_stream_rate(total_amount, duration);
 
-            let erc20_dispatcher = IERC20MetadataDispatcher { contract_address: token };
-            let token_decimals = erc20_dispatcher.decimals();
+            let token_decimals = IERC20MetadataDispatcher { contract_address: token }.decimals();
             assert(token_decimals <= 18, DECIMALS_TOO_HIGH);
 
             // Create new stream
@@ -293,7 +293,8 @@ mod PaymentStream {
                 cancelable,
                 status: StreamStatus::Active,
                 rate_per_second,
-                last_update_time: start_time,
+                snapshot_debt_scaled: 0,
+                snapshot_time: start_time,
             };
 
             self.accesscontrol._grant_role(STREAM_ADMIN_ROLE, stream.sender);
@@ -329,11 +330,73 @@ mod PaymentStream {
         fn withdraw(
             ref self: ContractState, stream_id: u256, amount: u256, to: ContractAddress,
         ) -> (u128, u128) {
-            self.assert_is_recipient_or_delegate(stream_id);
+            // Check: the withdraw amount is not zero.
             assert(amount > 0, ZERO_AMOUNT);
+
+            // Check: the withdrawal address is not zero.
             assert(to.is_non_zero(), INVALID_RECIPIENT);
 
+            // Check: `msg.sender` is neither the stream's recipient nor an approved third party,
+            // the withdrawal address must be the recipient.
+            if to != self.erc721.owner_of(stream_id) {
+                self.assert_is_recipient_or_delegate(stream_id);
+            }
+
             let stream = self.streams.read(stream_id);
+
+            let token_decimals = stream.token_decimals;
+
+            // Calculate the total debt.
+            let total_debt_scaled = self.ongoing_debt_scaled_of(stream_id)
+                + stream.snapshot_debt_scaled;
+            let total_debt = Helpers::descale_amount(total_debt_scaled, token_decimals);
+            println!("total_debt_scaled: {} total_debt: {}", total_debt_scaled, total_debt);
+
+            // Calculate the withdrawable amount.
+            let balance = stream.total_amount;
+            let withdrawable_amount = if balance < total_debt {
+                // If the stream balance is less than the total debt, the withdrawable amount is the
+                // balance.
+                balance
+            } else {
+                // Otherwise, the withdrawable amount is the total debt.
+                total_debt
+            };
+
+            println!("amount: {} withdrawable_amount: {}", amount, withdrawable_amount);
+            // Check: the withdraw amount is not greater than the withdrawable amount.
+            assert(amount <= withdrawable_amount, OVERDRAW);
+
+            // Calculate the amount scaled.
+            let amount_scaled = Helpers::scale_amount(amount, token_decimals);
+
+            let mut snapshot_debt_scaled = stream.snapshot_debt_scaled;
+            let mut snapshot_time = stream.snapshot_time;
+            // If the amount is less than the snapshot debt, reduce it from the snapshot debt and
+            // leave the snapshot time unchanged.
+            if amount_scaled <= stream.snapshot_debt_scaled {
+                snapshot_debt_scaled -= amount_scaled;
+            } // Else reduce the amount from the ongoing debt by setting snapshot time to
+            // `block.timestamp` and set the snapshot debt to the remaining total debt.
+            else {
+                snapshot_debt_scaled = total_debt_scaled - amount_scaled;
+                // Effect: update the stream time.
+                snapshot_time = get_block_timestamp();
+            }
+
+            self
+                .streams
+                .write(
+                    stream_id,
+                    Stream {
+                        snapshot_debt_scaled,
+                        snapshot_time,
+                        // Effect: update the stream balance.
+                        total_amount: stream.total_amount - amount,
+                        ..stream,
+                    },
+                );
+
             let fee = self.calculate_protocol_fee(amount);
             let net_amount = (amount - fee);
             let token_address = stream.token;
@@ -536,14 +599,52 @@ mod PaymentStream {
         }
 
         fn void(ref self: ContractState, stream_id: u256) {
-            let mut stream = self.streams.read(stream_id);
-
             self.assert_stream_exists(stream_id);
+
+            let stream = self.streams.read(stream_id);
             assert(stream.status != StreamStatus::Canceled, 'Stream is not active');
 
-            stream.status = StreamStatus::Voided;
-            self.streams.write(stream_id, stream);
+            // Check: `msg.sender` is either the stream's sender, recipient or an approved third
+            // party.
+            let caller = get_caller_address();
+            if caller != stream.sender {
+                self.assert_is_recipient_or_delegate(stream_id);
+            }
 
+            let debt_to_write_off = self.uncovered_debt_of(stream_id);
+
+            let mut snapshot_debt_scaled = stream.snapshot_debt_scaled;
+            // If the stream is solvent, update the total debt normally.
+            if debt_to_write_off == 0 {
+                let ongoing_debt_scaled = self.ongoing_debt_scaled_of(stream_id);
+                if ongoing_debt_scaled > 0 {
+                    // Effect: Update the snapshot debt by adding the ongoing debt.
+                    snapshot_debt_scaled += ongoing_debt_scaled;
+                }
+            } // If the stream is insolvent, write off the uncovered debt.
+            else {
+                // Effect: update the total debt by setting snapshot debt to the stream balance.
+                snapshot_debt_scaled =
+                    Helpers::scale_amount(stream.total_amount, stream.token_decimals);
+            }
+
+            self
+                .streams
+                .write(
+                    stream_id,
+                    Stream {
+                        snapshot_debt_scaled,
+                        // Effect: update the snapshot time.
+                        snapshot_time: get_block_timestamp(),
+                        // Effect: set the rate per second to zero.
+                        rate_per_second: 0.into(),
+                        // Effect: set the stream as voided.
+                        status: StreamStatus::Voided,
+                        ..stream,
+                    },
+                );
+
+            // Log the void.
             self.emit(StreamVoided { stream_id });
         }
 
@@ -617,21 +718,6 @@ mod PaymentStream {
 
 
         fn get_stream(self: @ContractState, stream_id: u256) -> Stream {
-            // Return dummy stream
-            // Stream {
-            //     sender: starknet::contract_address_const::<0>(),
-            //     recipient: starknet::contract_address_const::<0>(),
-            //     token: starknet::contract_address_const::<0>(),
-            //     total_amount: 0_u256,
-            //     start_time: 0_u64,
-            //     end_time: 0_u64,
-            //     withdrawn_amount: 0_u256,
-            //     cancelable: false,
-            //     status: StreamStatus::Active,
-            //     rate_per_second: 0,
-            //     last_update_time: 0,
-            // }
-
             self.streams.read(stream_id)
         }
 
@@ -661,8 +747,10 @@ mod PaymentStream {
         }
 
         fn get_total_debt(self: @ContractState, stream_id: u256) -> u256 {
-            // Return dummy amount
-            0_u256
+            let stream = self.streams.read(stream_id);
+            let total_debt_scaled = self.ongoing_debt_scaled_of(stream_id)
+                + stream.snapshot_debt_scaled;
+            Helpers::descale_amount(total_debt_scaled, decimals: stream.token_decimals)
         }
 
         fn get_uncovered_debt(self: @ContractState, stream_id: u256) -> u256 {
@@ -735,21 +823,26 @@ mod PaymentStream {
             let stream: Stream = self.streams.read(stream_id);
             assert!(stream.status == StreamStatus::Active, "Stream is not active");
 
-            let new_stream = Stream {
-                rate_per_second: new_rate_per_second,
-                sender: stream.sender,
-                token: stream.token,
-                token_decimals: stream.token_decimals,
-                total_amount: stream.total_amount,
-                start_time: stream.start_time,
-                end_time: stream.end_time,
-                withdrawn_amount: stream.withdrawn_amount,
-                cancelable: stream.cancelable,
-                status: stream.status,
-                last_update_time: starknet::get_block_timestamp(),
+            let ongoing_debt_scaled = self.ongoing_debt_scaled_of(stream_id);
+
+            let snapshot_debt_scaled = if ongoing_debt_scaled > 0 {
+                stream.snapshot_debt_scaled + ongoing_debt_scaled
+            } else {
+                stream.snapshot_debt_scaled
             };
 
-            self.streams.write(stream_id, new_stream);
+            self
+                .streams
+                .write(
+                    stream_id,
+                    Stream {
+                        rate_per_second: new_rate_per_second,
+                        snapshot_debt_scaled,
+                        snapshot_time: get_block_timestamp(),
+                        ..stream,
+                    },
+                );
+
             self
                 .emit(
                     Event::StreamRateUpdated(
@@ -762,12 +855,15 @@ mod PaymentStream {
                     ),
                 );
         }
+
         fn get_protocol_fee(self: @ContractState, token: ContractAddress) -> u256 {
             self.protocol_fees.read(token)
         }
+
         fn get_protocol_revenue(self: @ContractState, token: ContractAddress) -> u256 {
             self.protocol_revenue.read(token)
         }
+
         fn collect_protocol_revenue(
             ref self: ContractState, token: ContractAddress, to: ContractAddress,
         ) {
@@ -784,8 +880,9 @@ mod PaymentStream {
                         sent_to: to,
                         amount: protocol_revenue,
                     },
-                )
+                );
         }
+
         fn set_protocol_fee(
             ref self: ContractState, token: ContractAddress, new_protocol_fee: u256,
         ) {
@@ -852,6 +949,72 @@ mod PaymentStream {
             let stream: Stream = self.streams.read(stream_id);
 
             return stream.rate_per_second;
+        }
+
+        fn status_of(self: @ContractState, stream_id: u256) -> StreamStatus {
+            let stream = self.streams.read(stream_id);
+            stream.status
+        }
+
+        /// @dev Calculates the ongoing debt, as a 18-decimals fixed point number, accrued since
+        /// last snapshot. Return 0 if the stream is paused or `block.timestamp` is less than or
+        /// equal to snapshot time.
+        fn ongoing_debt_scaled_of(self: @ContractState, stream_id: u256) -> u256 {
+            let block_timestamp = get_block_timestamp();
+            let stream = self.streams.read(stream_id);
+            let snapshot_time = stream.snapshot_time;
+
+            let rate_per_second: u256 = stream.rate_per_second.into();
+
+            // Check:if the rate per second is zero or the `block.timestamp` is less than the
+            // `snapshotTime`.
+            if rate_per_second == 0 || (block_timestamp <= snapshot_time) {
+                return 0;
+            }
+
+            // Calculate time elapsed since the last snapshot.
+            let elapsed_time = block_timestamp - snapshot_time;
+
+            // Calculate the ongoing debt scaled accrued by multiplying the elapsed time by the rate
+            // per second.
+            elapsed_time.into() * rate_per_second
+        }
+
+        /// @dev Calculates the amount of covered debt by the stream balance.
+        fn covered_debt_of(self: @ContractState, stream_id: u256) -> u128 {
+            let stream = self.streams.read(stream_id);
+            let balance = stream.total_amount;
+
+            // If the balance is zero, return zero.
+            if balance == 0 {
+                return 0;
+            }
+
+            let total_debt = self.get_total_debt(stream_id);
+
+            // If the stream balance is less than or equal to the total debt, return the stream
+            // balance.
+            if balance < total_debt {
+                return balance.try_into().unwrap();
+            }
+
+            // At this point, the total debt fits within `uint128`, as it is less than or equal to
+            // the balance.
+            total_debt.try_into().unwrap()
+        }
+
+        /// @dev Calculates the uncovered debt.
+        fn uncovered_debt_of(self: @ContractState, stream_id: u256) -> u256 {
+            let stream = self.streams.read(stream_id);
+            let balance = stream.total_amount;
+
+            let total_debt = self.get_total_debt(stream_id);
+
+            if balance < total_debt {
+                total_debt - balance
+            } else {
+                0
+            }
         }
     }
 }

@@ -1,6 +1,6 @@
 use core::traits::Into;
 use fp::UFixedPoint123x128;
-use fundable::base::types::{Stream, StreamStatus};
+use fundable::base::types::StreamStatus;
 use fundable::interfaces::IPaymentStream::{IPaymentStreamDispatcher, IPaymentStreamDispatcherTrait};
 use openzeppelin::access::accesscontrol::interface::{
     IAccessControlDispatcher, IAccessControlDispatcherTrait,

@@ -14,7 +14,8 @@ pub struct Stream {
     pub token_decimals: u8,
     pub status: StreamStatus,
     pub rate_per_second: UFixedPoint123x128,
-    pub last_update_time: u64,
+    pub snapshot_debt_scaled: u256,
+    pub snapshot_time: u64,
 }
 
 #[derive(Drop, starknet::Event)]
