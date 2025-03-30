@@ -73,6 +73,7 @@ fn create_stream(
     end_time: u64,
     cancelable: bool,
     token: ContractAddress,
+    transferable: bool,
 ) -> u256 {
     // ... stream creation logic ...
 

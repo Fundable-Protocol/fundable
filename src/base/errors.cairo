@@ -16,6 +16,9 @@ pub mod Errors {
     /// Thrown when attempting to create a stream or make a payment with zero tokens
     pub const ZERO_AMOUNT: felt252 = 'Error: Amount must be > 0.';
 
+    /// Thrown when a stream is not transferable.
+    pub const NON_TRANSFERABLE_STREAM: felt252 = 'Error: Non-transferrable stream';
+
     /// Thrown when the contract does not have sufficient allowance to transfer tokens on behalf of
     /// the sender
     pub const INSUFFICIENT_ALLOWANCE: felt252 = 'Error: Insufficient allowance.';

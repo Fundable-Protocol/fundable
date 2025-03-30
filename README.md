@@ -102,7 +102,8 @@ let stream = payment_stream.create_stream(
     total_amount,
     start_time,
     end_time,
-    token
+    token,
+    transferable
 );
 
 // Withdraw from stream
@@ -178,7 +179,8 @@ Event::StreamCreated(
         sender,         // Stream creator address
         recipient,      // Payment recipient address
         total_amount,   // Total tokens to be streamed
-        token          // ERC20 token address
+        token,          // ERC20 token address
+        transferable    // NFT Transferability Flag
     }
 )
 ```
