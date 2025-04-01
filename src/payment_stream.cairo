@@ -549,7 +549,6 @@ pub mod PaymentStream {
             let total_debt_scaled = self.ongoing_debt_scaled_of(stream_id)
                 + stream.snapshot_debt_scaled;
             let total_debt = Helpers::descale_amount(total_debt_scaled, token_decimals);
-            println!("total_debt_scaled: {} total_debt: {}", total_debt_scaled, total_debt);
 
             // Calculate the withdrawable amount.
             let balance = stream.balance;
@@ -562,7 +561,6 @@ pub mod PaymentStream {
                 total_debt
             };
 
-            println!("amount: {} withdrawable_amount: {}", amount, withdrawable_amount);
             // Check: the withdraw amount is not greater than the withdrawable amount.
             // assert(amount <= withdrawable_amount, OVERDRAW);
 

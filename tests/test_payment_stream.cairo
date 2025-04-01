@@ -1,19 +1,23 @@
 use core::traits::Into;
 use fp::UFixedPoint123x128;
+use fundable::base::helpers::Helpers;
 use fundable::base::types::StreamStatus;
 use fundable::interfaces::IPaymentStream::{IPaymentStreamDispatcher, IPaymentStreamDispatcherTrait};
 use fundable::payment_stream::PaymentStream;
 use openzeppelin::access::accesscontrol::interface::{
     IAccessControlDispatcher, IAccessControlDispatcherTrait,
 };
-use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
+use openzeppelin::token::erc20::interface::{
+    IERC20Dispatcher, IERC20DispatcherTrait, IERC20MixinDispatcher, IERC20MixinDispatcherTrait,
+};
 use openzeppelin::token::erc721::interface::{
     IERC721Dispatcher, IERC721DispatcherTrait, IERC721MetadataDispatcher,
     IERC721MetadataDispatcherTrait,
 };
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, EventSpyAssertionsTrait, declare, spy_events,
-    start_cheat_caller_address, stop_cheat_caller_address, test_address,
+    start_cheat_block_timestamp, start_cheat_caller_address, stop_cheat_caller_address,
+    test_address,
 };
 use starknet::{ContractAddress, contract_address_const};
 
@@ -2142,4 +2146,170 @@ fn test_restart_and_deposit_insufficient_allowance() {
     start_cheat_caller_address(payment_stream.contract_address, sender);
     payment_stream.restart_and_deposit(stream_id, new_rate, additional_amount);
     stop_cheat_caller_address(payment_stream.contract_address);
+}
+
+#[test]
+fn test_status_of_active() {
+    let (token_address, _, payment_stream, _) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 1000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+    let transferable = true;
+
+    let stream_id = payment_stream
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+    assert_eq!(payment_stream.status_of(stream_id), StreamStatus::Active);
+}
+
+#[test]
+fn test_status_of_paused() {
+    let (token_address, _, payment_stream, _) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 1000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+    let transferable = true;
+
+    let stream_id = payment_stream
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+    payment_stream.pause(stream_id);
+    assert_eq!(payment_stream.status_of(stream_id), StreamStatus::Paused);
+}
+
+#[test]
+fn test_status_of_voided() {
+    let (token_address, _, payment_stream, _) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 1000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+    let transferable = true;
+
+    let stream_id = payment_stream
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+    payment_stream.void(stream_id);
+    assert_eq!(payment_stream.status_of(stream_id), StreamStatus::Voided);
+}
+
+#[test]
+fn test_status_of_canceled() {
+    let (token_address, sender, payment_stream, _) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 1000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+    let transferable = true;
+
+    let token = IERC20Dispatcher { contract_address: token_address };
+    start_cheat_caller_address(token_address, sender);
+    token.approve(payment_stream.contract_address, total_amount);
+    stop_cheat_caller_address(token_address);
+
+    start_cheat_caller_address(payment_stream.contract_address, sender);
+    let stream_id = payment_stream
+        .create_stream_with_deposit(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+    payment_stream.cancel(stream_id);
+    assert_eq!(payment_stream.status_of(stream_id), StreamStatus::Canceled);
+}
+
+#[test]
+fn test_ongoing_debt_scaled_of() {
+    let (token_address, _, payment_stream, _) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 1000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+    let transferable = true;
+
+    let stream_id = payment_stream
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+    start_cheat_block_timestamp(payment_stream.contract_address, start_time);
+    assert_eq!(payment_stream.ongoing_debt_scaled_of(stream_id), 0);
+    start_cheat_block_timestamp(
+        payment_stream.contract_address, start_time + (end_time - start_time) / 2,
+    );
+    assert_eq!(payment_stream.ongoing_debt_scaled_of(stream_id), total_amount / 2);
+    start_cheat_block_timestamp(payment_stream.contract_address, end_time);
+    assert_eq!(payment_stream.ongoing_debt_scaled_of(stream_id), total_amount);
+}
+
+#[test]
+fn test_covered_debt_of() {
+    let (token_address, sender, payment_stream, _) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 10000000000000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+    let transferable = true;
+
+    let stream_id = payment_stream
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+    assert_eq!(payment_stream.covered_debt_of(stream_id), 0);
+
+    let token = IERC20MixinDispatcher { contract_address: token_address };
+    start_cheat_caller_address(token_address, sender);
+    token.approve(payment_stream.contract_address, total_amount);
+    stop_cheat_caller_address(token_address);
+
+    start_cheat_caller_address(payment_stream.contract_address, sender);
+    let stream_id = payment_stream
+        .create_stream_with_deposit(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+    start_cheat_block_timestamp(payment_stream.contract_address, start_time);
+    assert_eq!(payment_stream.covered_debt_of(stream_id), 0);
+    start_cheat_block_timestamp(
+        payment_stream.contract_address, start_time + (end_time - start_time) / 2,
+    );
+    assert_eq!(
+        payment_stream.covered_debt_of(stream_id).into(),
+        Helpers::descale_amount(total_amount / 2, token.decimals()),
+    );
+    start_cheat_block_timestamp(payment_stream.contract_address, end_time);
+    assert_eq!(
+        payment_stream.covered_debt_of(stream_id).into(),
+        Helpers::descale_amount(total_amount, token.decimals()),
+    );
+}
+
+#[test]
+fn test_uncovered_debt_of() {
+    let (token_address, sender, payment_stream, _) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 10000000000000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+    let transferable = true;
+
+    let token = IERC20MixinDispatcher { contract_address: token_address };
+    start_cheat_caller_address(token_address, sender);
+    token.approve(payment_stream.contract_address, total_amount);
+    stop_cheat_caller_address(token_address);
+
+    start_cheat_caller_address(payment_stream.contract_address, sender);
+    let stream_id = payment_stream
+        .create_stream_with_deposit(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+    assert_eq!(payment_stream.uncovered_debt_of(stream_id), 0);
 }
