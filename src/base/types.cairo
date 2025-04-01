@@ -16,7 +16,8 @@ pub struct Stream {
     pub balance: u256,
     pub status: StreamStatus,
     pub rate_per_second: UFixedPoint123x128,
-    pub last_update_time: u64,
+    pub snapshot_debt_scaled: u256,
+    pub snapshot_time: u64,
     pub transferable: bool,
 }
 
@@ -45,7 +46,7 @@ pub struct WeightedDistribution {
 }
 
 /// @notice Enum representing the possible states of a stream
-#[derive(Drop, Serde, starknet::Store, PartialEq)]
+#[derive(Drop, Serde, starknet::Store, PartialEq, Debug)]
 #[allow(starknet::store_no_default_variant)]
 pub enum StreamStatus {
     Active, // Stream is actively streaming tokens

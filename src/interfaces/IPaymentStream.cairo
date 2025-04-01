@@ -1,6 +1,6 @@
 use fp::UFixedPoint123x128;
 use starknet::ContractAddress;
-use crate::base::types::{ProtocolMetrics, Stream, StreamMetrics};
+use crate::base::types::{ProtocolMetrics, Stream, StreamMetrics, StreamStatus};
 
 /// @title IPaymentStream
 /// @notice Creates and manages payment streams with linear streaming functions.
@@ -192,10 +192,6 @@ pub trait IPaymentStream<TContractState> {
     /// @param transferable Boolean indicating if the stream can be transferred
     fn set_transferability(ref self: TContractState, stream_id: u256, transferable: bool);
 
-    /// @notice Checks if the stream is transferable
-    /// @param stream_id The ID of the stream to check
-    /// @return Boolean indicating if the stream is transferable
-    fn is_transferable(self: @TContractState, stream_id: u256) -> bool;
     /// @notice Gets the protocol fee of the token
     /// @param token The ContractAddress of the token
     /// @return u256 The fee of the token
@@ -309,6 +305,32 @@ pub trait IPaymentStream<TContractState> {
     /// @param amount The amount to refund from the stream
     /// @return Boolean indicating if the refund and pause operation was successful
     fn refund_and_pause(ref self: TContractState, stream_id: u256, amount: u256) -> bool;
+
+    /// @notice Returns the stream's status.
+    /// @dev Reverts if `stream_id` references a null stream.
+    /// Integrators should exercise caution when depending on the return value of this function as
+    /// streams can be paused and resumed at any moment.
+    /// @param stream_id The stream ID for the query.
+    fn status_of(self: @TContractState, stream_id: u256) -> StreamStatus;
+
+    /// @notice Returns the amount of debt accrued since the snapshot time until now, denoted as a
+    /// fixed-point number where 1e18 is 1 token.
+    /// @dev Reverts if `stream_id` references a null stream.
+    /// @param stream_id The stream ID for the query.
+    fn ongoing_debt_scaled_of(self: @TContractState, stream_id: u256) -> u256;
+
+    /// @notice Calculates the amount that the recipient can withdraw from the stream, denoted in
+    /// token decimals.
+    /// @dev Reverts if `stream_id` references a null stream.
+    /// @param stream_id The stream ID for the query.
+    /// @return withdrawableAmount The amount that the recipient can withdraw.
+    fn covered_debt_of(self: @TContractState, stream_id: u256) -> u128;
+
+    /// @notice Returns the amount of debt not covered by the stream balance, denoted in token's
+    /// decimals.
+    /// @dev Reverts if `stream_id` references a null stream.
+    /// @param stream_id The stream ID for the query.
+    fn uncovered_debt_of(self: @TContractState, stream_id: u256) -> u256;
 
     /// @notice Retrieves the sum of balances of all streams
     /// @param token The ERC-20 token to query

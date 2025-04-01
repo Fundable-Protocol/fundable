@@ -47,5 +47,8 @@ pub mod Errors {
 
     /// Thrown when wrong recipient or delegate
     pub const WRONG_RECIPIENT_OR_DELEGATE: felt252 = 'WRONG_RECIPIENT_OR_DELEGATE';
+
+    /// @notice Thrown when trying to withdraw an amount greater than the withdrawable amount.
+    pub const OVERDRAW: felt252 = 'Error: Overdraw';
 }
 

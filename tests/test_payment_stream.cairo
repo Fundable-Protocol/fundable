@@ -1,19 +1,23 @@
 use core::traits::Into;
 use fp::UFixedPoint123x128;
-use fundable::base::types::{Stream, StreamStatus};
+use fundable::base::helpers::Helpers;
+use fundable::base::types::StreamStatus;
 use fundable::interfaces::IPaymentStream::{IPaymentStreamDispatcher, IPaymentStreamDispatcherTrait};
 use fundable::payment_stream::PaymentStream;
 use openzeppelin::access::accesscontrol::interface::{
     IAccessControlDispatcher, IAccessControlDispatcherTrait,
 };
-use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
+use openzeppelin::token::erc20::interface::{
+    IERC20Dispatcher, IERC20DispatcherTrait, IERC20MixinDispatcher, IERC20MixinDispatcherTrait,
+};
 use openzeppelin::token::erc721::interface::{
     IERC721Dispatcher, IERC721DispatcherTrait, IERC721MetadataDispatcher,
     IERC721MetadataDispatcherTrait,
 };
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, EventSpyAssertionsTrait, declare, spy_events,
-    start_cheat_caller_address, stop_cheat_caller_address, test_address,
+    start_cheat_block_timestamp, start_cheat_caller_address, stop_cheat_caller_address,
+    test_address,
 };
 use starknet::{ContractAddress, contract_address_const};
 
@@ -105,7 +109,9 @@ fn test_nft_metadata() {
 
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     stop_cheat_caller_address(payment_stream.contract_address);
 
     let metadata = IERC721MetadataDispatcher { contract_address: payment_stream.contract_address };
@@ -138,7 +144,7 @@ fn test_successful_create_stream() {
     // This is the first Stream Created, so it will be 0.
     assert!(stream_id == 0_u256, "Stream creation failed");
     let owner = erc721.owner_of(stream_id);
-    assert!(owner == initial_owner, "NFT not minted to initial owner");
+    assert!(owner == recipient, "NFT not minted to initial owner");
 }
 
 #[test]
@@ -846,7 +852,9 @@ fn test_successful_refund() {
     // Create stream
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
 
     // Deposit to the stream
     payment_stream.deposit(stream_id, total_amount);
@@ -884,7 +892,9 @@ fn test_successful_refund_with_wrong_address() {
     // Create Stream
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     stop_cheat_caller_address(payment_stream.contract_address);
 
     // Check sender's initial balance
@@ -916,7 +926,9 @@ fn test_successful_refund_with_overdraft() {
     stop_cheat_caller_address(payment_stream.contract_address);
 
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     println!("Stream ID: {}", stream_id);
 
     // This is the first Stream Created, so it will be 0.
@@ -945,7 +957,9 @@ fn test_successful_refund_max() {
 
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     // Sender assigns a delegate.
     payment_stream.delegate_stream(stream_id, sender);
     stop_cheat_caller_address(payment_stream.contract_address);
@@ -984,7 +998,9 @@ fn test_successful_refund_max_with_wrong_address() {
     // Create Stream
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     stop_cheat_caller_address(payment_stream.contract_address);
 
     // Check sender's initial balance
@@ -1016,7 +1032,9 @@ fn test_successful_refund_and_pause() {
 
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     // Sender assigns a delegate.
     payment_stream.delegate_stream(stream_id, sender);
     stop_cheat_caller_address(payment_stream.contract_address);
@@ -1059,7 +1077,9 @@ fn test_successful_refund_and_pause_with_wrong_address() {
     // Create Stream
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     stop_cheat_caller_address(payment_stream.contract_address);
 
     // Check sender's initial balance
@@ -1091,7 +1111,9 @@ fn test_successful_refund_and_pause_with_overdraft() {
     stop_cheat_caller_address(payment_stream.contract_address);
 
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     println!("Stream ID: {}", stream_id);
 
     // This is the first Stream Created, so it will be 0.
@@ -1122,7 +1144,7 @@ fn test_nft_transfer_and_withdrawal() {
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
         .create_stream(
-            initial_owner, total_amount, start_time, end_time, cancelable, token_address,
+            initial_owner, total_amount, start_time, end_time, cancelable, token_address, true,
         );
     stop_cheat_caller_address(payment_stream.contract_address);
 
@@ -1262,7 +1284,7 @@ fn test_decimal_boundary_conditions() {
 // New tests for the added functions
 #[test]
 fn test_transfer_stream() {
-    let (token_address, sender, payment_stream) = setup();
+    let (token_address, sender, payment_stream, _) = setup();
     let recipient = contract_address_const::<'recipient'>();
     let total_amount = 10000_u256;
     let start_time = 100_u64;
@@ -1285,7 +1307,7 @@ fn test_transfer_stream() {
 
 #[test]
 fn test_set_transferability() {
-    let (token_address, sender, payment_stream) = setup();
+    let (token_address, sender, payment_stream, _) = setup();
     let recipient = contract_address_const::<'recipient'>();
     let total_amount = 10000_u256;
     let start_time = 100_u64;
@@ -1307,7 +1329,7 @@ fn test_set_transferability() {
 
 #[test]
 fn test_is_transferable() {
-    let (token_address, sender, payment_stream) = setup();
+    let (token_address, sender, payment_stream, _) = setup();
     let recipient = contract_address_const::<'recipient'>();
     let total_amount = 10000_u256;
     let start_time = 100_u64;
@@ -1371,7 +1393,9 @@ fn test_successful_stream_check() {
     let cancelable = true;
 
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     println!("Stream ID: {}", stream_id);
 
     let is_stream = payment_stream.is_stream(stream_id);
@@ -1388,7 +1412,9 @@ fn test_successful_pause_check() {
     let cancelable = true;
 
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     println!("Stream ID: {}", stream_id);
 
     let is_paused = payment_stream.is_paused(stream_id);
@@ -1411,7 +1437,9 @@ fn test_successful_voided_check() {
     let cancelable = true;
 
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     println!("Stream ID: {}", stream_id);
 
     let is_voided = payment_stream.is_voided(stream_id);
@@ -1434,7 +1462,9 @@ fn test_successful_transferrable_check() {
     let cancelable = true;
 
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     println!("Stream ID: {}", stream_id);
 
     let is_transferable = payment_stream.is_transferable(stream_id);
@@ -1452,7 +1482,9 @@ fn test_successful_get_sender() {
 
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     println!("Stream ID: {}", stream_id);
     stop_cheat_caller_address(payment_stream.contract_address);
 
@@ -1472,7 +1504,9 @@ fn test_successful_get_recipient() {
 
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     println!("Stream ID: {}", stream_id);
     stop_cheat_caller_address(payment_stream.contract_address);
 
@@ -1492,7 +1526,9 @@ fn test_successful_get_token() {
 
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     println!("Stream ID: {}", stream_id);
     stop_cheat_caller_address(payment_stream.contract_address);
 
@@ -1512,7 +1548,9 @@ fn test_successful_get_rate_per_second() {
 
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     println!("Stream ID: {}", stream_id);
     stop_cheat_caller_address(payment_stream.contract_address);
 
@@ -1534,7 +1572,9 @@ fn test_deposit_successful() {
     // Create stream
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
 
     // Setup token approval for deposit
     let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
@@ -1567,7 +1607,9 @@ fn test_deposit_zero_amount() {
     // Create stream
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
 
     // Try to deposit zero amount - should panic
     payment_stream.deposit(stream_id, deposit_amount);
@@ -1589,7 +1631,9 @@ fn test_deposit_to_voided_stream() {
     // Create stream
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
 
     // Void the stream
     payment_stream.void(stream_id);
@@ -1630,7 +1674,9 @@ fn test_deposit_to_canceled_stream() {
     // Create and cancel stream
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     payment_stream.cancel(stream_id);
 
     // Setup token approval
@@ -1659,7 +1705,9 @@ fn test_deposit_and_pause_successful() {
     // Create stream
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
 
     // Setup token approval for deposit
     let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
@@ -1695,7 +1743,9 @@ fn test_deposit_and_pause_zero_amount() {
     // Create stream
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
 
     // Try to deposit_and_pause with zero amount - should panic
     payment_stream.deposit_and_pause(stream_id, deposit_amount);
@@ -1717,7 +1767,9 @@ fn test_deposit_by_non_sender() {
     // Create stream
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     stop_cheat_caller_address(payment_stream.contract_address);
 
     // Setup token approval for deposit by non-sender
@@ -1738,7 +1790,7 @@ fn test_deposit_by_non_sender() {
 
 #[test]
 fn test_aggregate_balance_on_stream_creation() {
-    let (token_address, sender, payment_stream) = setup();
+    let (token_address, sender, payment_stream, _) = setup();
     let recipient = contract_address_const::<0x2>();
     let total_amount = 1000_u256;
     let start_time = 100_u64;
@@ -1747,7 +1799,9 @@ fn test_aggregate_balance_on_stream_creation() {
 
     start_cheat_caller_address(payment_stream.contract_address, sender);
     payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     stop_cheat_caller_address(payment_stream.contract_address);
 
     // Verify that the aggregated balance match the total amount of the first stream
@@ -1759,7 +1813,9 @@ fn test_aggregate_balance_on_stream_creation() {
 
     start_cheat_caller_address(payment_stream.contract_address, sender);
     payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     stop_cheat_caller_address(payment_stream.contract_address);
 
     // Verify that the aggregated balance match the sum of the two streams
@@ -1772,7 +1828,7 @@ fn test_aggregate_balance_on_stream_creation() {
 
 #[test]
 fn test_aggregate_balance_on_withdraw() {
-    let (token_address, sender, payment_stream) = setup();
+    let (token_address, sender, payment_stream, _) = setup();
     let recipient = contract_address_const::<'recipient'>();
     let total_amount = 10000_u256;
     let start_time = 100_u64;
@@ -1788,7 +1844,9 @@ fn test_aggregate_balance_on_withdraw() {
 
     start_cheat_caller_address(payment_stream.contract_address, sender);
     let stream_id = payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     payment_stream.delegate_stream(stream_id, delegate);
     stop_cheat_caller_address(payment_stream.contract_address);
 
@@ -1817,7 +1875,7 @@ fn test_aggregate_balance_on_withdraw() {
 
 #[test]
 fn test_recover() {
-    let (token_address, sender, payment_stream) = setup();
+    let (token_address, sender, payment_stream, _) = setup();
     let recipient = contract_address_const::<0x2>();
     let total_amount = 10000_u256;
     let surplus = 10_u256;
@@ -1835,7 +1893,9 @@ fn test_recover() {
 
     start_cheat_caller_address(payment_stream.contract_address, sender);
     payment_stream
-        .create_stream(recipient, total_amount, start_time, end_time, cancelable, token_address);
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, true,
+        );
     stop_cheat_caller_address(payment_stream.contract_address);
 
     start_cheat_caller_address(payment_stream.contract_address, protocol_owner);
@@ -1855,7 +1915,7 @@ fn test_recover() {
 #[test]
 #[should_panic]
 fn test_recover_when_caller_not_admin() {
-    let (token_address, _, payment_stream) = setup();
+    let (token_address, _, payment_stream, _) = setup();
     let recipient = contract_address_const::<0x2>();
 
     start_cheat_caller_address(payment_stream.contract_address, recipient);
@@ -1866,7 +1926,7 @@ fn test_recover_when_caller_not_admin() {
 #[test]
 #[should_panic]
 fn test_recover_when_nothing_to_recover() {
-    let (token_address, _, payment_stream) = setup();
+    let (token_address, _, payment_stream, _) = setup();
     let protocol_owner: ContractAddress = contract_address_const::<'protocol_owner'>();
     let recipient = contract_address_const::<0x2>();
 
@@ -2086,4 +2146,170 @@ fn test_restart_and_deposit_insufficient_allowance() {
     start_cheat_caller_address(payment_stream.contract_address, sender);
     payment_stream.restart_and_deposit(stream_id, new_rate, additional_amount);
     stop_cheat_caller_address(payment_stream.contract_address);
+}
+
+#[test]
+fn test_status_of_active() {
+    let (token_address, _, payment_stream, _) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 1000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+    let transferable = true;
+
+    let stream_id = payment_stream
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+    assert_eq!(payment_stream.status_of(stream_id), StreamStatus::Active);
+}
+
+#[test]
+fn test_status_of_paused() {
+    let (token_address, _, payment_stream, _) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 1000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+    let transferable = true;
+
+    let stream_id = payment_stream
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+    payment_stream.pause(stream_id);
+    assert_eq!(payment_stream.status_of(stream_id), StreamStatus::Paused);
+}
+
+#[test]
+fn test_status_of_voided() {
+    let (token_address, _, payment_stream, _) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 1000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+    let transferable = true;
+
+    let stream_id = payment_stream
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+    payment_stream.void(stream_id);
+    assert_eq!(payment_stream.status_of(stream_id), StreamStatus::Voided);
+}
+
+#[test]
+fn test_status_of_canceled() {
+    let (token_address, sender, payment_stream, _) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 1000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+    let transferable = true;
+
+    let token = IERC20Dispatcher { contract_address: token_address };
+    start_cheat_caller_address(token_address, sender);
+    token.approve(payment_stream.contract_address, total_amount);
+    stop_cheat_caller_address(token_address);
+
+    start_cheat_caller_address(payment_stream.contract_address, sender);
+    let stream_id = payment_stream
+        .create_stream_with_deposit(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+    payment_stream.cancel(stream_id);
+    assert_eq!(payment_stream.status_of(stream_id), StreamStatus::Canceled);
+}
+
+#[test]
+fn test_ongoing_debt_scaled_of() {
+    let (token_address, _, payment_stream, _) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 1000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+    let transferable = true;
+
+    let stream_id = payment_stream
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+    start_cheat_block_timestamp(payment_stream.contract_address, start_time);
+    assert_eq!(payment_stream.ongoing_debt_scaled_of(stream_id), 0);
+    start_cheat_block_timestamp(
+        payment_stream.contract_address, start_time + (end_time - start_time) / 2,
+    );
+    assert_eq!(payment_stream.ongoing_debt_scaled_of(stream_id), total_amount / 2);
+    start_cheat_block_timestamp(payment_stream.contract_address, end_time);
+    assert_eq!(payment_stream.ongoing_debt_scaled_of(stream_id), total_amount);
+}
+
+#[test]
+fn test_covered_debt_of() {
+    let (token_address, sender, payment_stream, _) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 10000000000000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+    let transferable = true;
+
+    let stream_id = payment_stream
+        .create_stream(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+    assert_eq!(payment_stream.covered_debt_of(stream_id), 0);
+
+    let token = IERC20MixinDispatcher { contract_address: token_address };
+    start_cheat_caller_address(token_address, sender);
+    token.approve(payment_stream.contract_address, total_amount);
+    stop_cheat_caller_address(token_address);
+
+    start_cheat_caller_address(payment_stream.contract_address, sender);
+    let stream_id = payment_stream
+        .create_stream_with_deposit(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+    start_cheat_block_timestamp(payment_stream.contract_address, start_time);
+    assert_eq!(payment_stream.covered_debt_of(stream_id), 0);
+    start_cheat_block_timestamp(
+        payment_stream.contract_address, start_time + (end_time - start_time) / 2,
+    );
+    assert_eq!(
+        payment_stream.covered_debt_of(stream_id).into(),
+        Helpers::descale_amount(total_amount / 2, token.decimals()),
+    );
+    start_cheat_block_timestamp(payment_stream.contract_address, end_time);
+    assert_eq!(
+        payment_stream.covered_debt_of(stream_id).into(),
+        Helpers::descale_amount(total_amount, token.decimals()),
+    );
+}
+
+#[test]
+fn test_uncovered_debt_of() {
+    let (token_address, sender, payment_stream, _) = setup();
+    let recipient = contract_address_const::<0x2>();
+    let total_amount = 10000000000000_u256;
+    let start_time = 100_u64;
+    let end_time = 200_u64;
+    let cancelable = true;
+    let transferable = true;
+
+    let token = IERC20MixinDispatcher { contract_address: token_address };
+    start_cheat_caller_address(token_address, sender);
+    token.approve(payment_stream.contract_address, total_amount);
+    stop_cheat_caller_address(token_address);
+
+    start_cheat_caller_address(payment_stream.contract_address, sender);
+    let stream_id = payment_stream
+        .create_stream_with_deposit(
+            recipient, total_amount, start_time, end_time, cancelable, token_address, transferable,
+        );
+    assert_eq!(payment_stream.uncovered_debt_of(stream_id), 0);
 }
