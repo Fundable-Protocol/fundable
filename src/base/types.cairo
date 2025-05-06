@@ -127,3 +127,36 @@ pub struct CampaignWithdrawal {
     pub amount: u256,
     pub asset: u256,
 }
+
+#[derive(Drop, Serde)]
+pub struct Recipient {
+    address: ContractAddress,
+    name: felt252,
+    amount: u256,
+}
+
+#[derive(Drop, Serde)]
+pub struct DirectDeposit {
+    name: felt252,
+    token_address: ContractAddress,
+    payment_date: u64,
+    recipients: Array<Recipient>,
+}
+
+#[derive(Drop, Serde, starknet::Store)]
+pub struct DirectDepositPayment {
+    recipient: ContractAddress,
+    amount: u256,
+    token_address: ContractAddress,
+    payment_date: u64,
+    direct_deposit_id: u256,
+}
+
+#[derive(Drop, Serde, starknet::Store)]
+pub struct DirectDepositHistory {
+    caller: ContractAddress,
+    total_amount: u256,
+    token_address: ContractAddress,
+    number_of_recipient: u256,
+    timestamp: u64,
+}
