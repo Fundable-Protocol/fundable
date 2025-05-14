@@ -13,7 +13,8 @@ pub mod CampaignDonation {
         StoragePointerReadAccess, StoragePointerWriteAccess,
     };
     use starknet::{
-        ClassHash, ContractAddress, get_block_timestamp, get_caller_address, get_contract_address,
+        ClassHash, ContractAddress, contract_address_const ,get_block_timestamp, get_caller_address,
+        get_contract_address,
     };
     use crate::base::errors::Errors::{CAMPAIGN_REF_EMPTY, CAMPAIGN_REF_EXISTS, ZERO_AMOUNT};
     use crate::base::types::{Campaigns, Donations};
@@ -47,7 +48,9 @@ pub mod CampaignDonation {
         //     (ContractAddress, u256), CampaignWithdrawal,
         // >, // map<(campaign_owner, campaign_id), CampaignWithdrawal>
         // Track existing campaign refs
-        campaign_refs: Map<felt252, bool> // All campaign ref to use for is_campaign_ref_exists
+        campaign_refs: Map<felt252, bool>, // All campaign ref to use for is_campaign_ref_exists
+        campaign_closed: Map<u256, bool>, // Map campaign ids to closing boolean
+        campaign_withdrawn: Map<u256, bool> //Map campaign ids to whether they have been withdrawn
     }
 
 
@@ -204,7 +207,41 @@ pub mod CampaignDonation {
         }
 
 
-        fn withdraw_from_campaign(ref self: ContractState, campaign_id: u256) {}
+        fn withdraw_from_campaign(ref self: ContractState, campaign_id: u256) {
+            let caller = get_caller_address();
+            let mut campaign = self.campaigns.read(campaign_id);
+            let campaign_owner = campaign.owner;
+            assert(caller == campaign_owner, 'Caller is Not Campaign Owner');
+            assert(campaign.current_amount >= campaign.target_amount, 'Target Not Reached');
+            campaign.is_goal_reached = true;
+            self.campaign_closed.write(campaign_id, true);
+
+            let this_contract = get_contract_address();
+
+            assert(campaign.is_closed, 'Campaign Not Closed');
+
+            assert(!self.campaign_withdrawn.read(campaign_id), 'Double Withdrawal');
+
+            let asset = campaign.asset;
+            let asset_address = self.get_asset_address(asset);
+
+            let token = IERC20Dispatcher { contract_address: asset_address };
+
+            let approve = token.approve(campaign_owner, campaign.target_amount);
+
+            assert(approve, 'Approval failed');
+
+            let allowance = token.allowance(this_contract, campaign_owner);
+
+            assert(!allowance.is_zero(), 'Zero allowance found');
+
+            assert(allowance >= campaign.target_amount, 'Insufficient allowance');
+
+            let transfer_from = token
+                .transfer_from(this_contract, campaign_owner, campaign.target_amount);
+
+            assert(transfer_from, 'Withdraw failed');
+        }
 
         fn get_donation(self: @ContractState, campaign_id: u256, donation_id: u256) -> Donations {
             let donations: Donations = self.donations.entry(campaign_id).entry(donation_id).read();
@@ -264,6 +301,39 @@ pub mod CampaignDonation {
         fn get_campaign(self: @ContractState, camapign_id: u256) -> Campaigns {
             let campaign: Campaigns = self.campaigns.read(camapign_id);
             campaign
+        }
+    }
+
+    #[generate_trait]
+    impl InternalImpl of InternalTrait {
+        fn get_asset_address(self: @ContractState, token_name: felt252) -> ContractAddress {
+            let mut token_address: ContractAddress = contract_address_const::<0>();
+            if token_name == 'USDC' || token_name == 'usdt' {
+                token_address =
+                    contract_address_const::<
+                        0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8,
+                    >();
+            }
+            if token_name == 'STRK' || token_name == 'strk' {
+                token_address =
+                    contract_address_const::<
+                        0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d,
+                    >()
+            }
+            if token_name == 'ETH' || token_name == 'eth' {
+                token_address =
+                    contract_address_const::<
+                        0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7,
+                    >();
+            }
+            if token_name == 'USDT' || token_name == 'usdt' {
+                token_address =
+                    contract_address_const::<
+                        0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8,
+                    >()
+            }
+
+            token_address
         }
     }
 }
