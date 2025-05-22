@@ -11,13 +11,11 @@ pub trait ICampaignDonation<TContractState> {
         ref self: TContractState,
         campaign_ref: felt252, // (5 character unique character)
         target_amount: u256,
-        asset: felt252 // in what asset are you collecting donation in (STRK, ETH, USDC OR USDT)
+        // asset: felt252 // in what asset are you collecting donation in (STRK, ETH, USDC OR USDT)
     ) -> u256;
 
 
-    fn donate_to_campaign(
-        ref self: TContractState, campaign_id: u256, amount: u256, token: ContractAddress,
-    ) -> u256;
+    fn donate_to_campaign(ref self: TContractState, campaign_id: u256, amount: u256) -> u256;
 
     fn withdraw_from_campaign(ref self: TContractState, campaign_id: u256);
 

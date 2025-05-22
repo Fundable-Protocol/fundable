@@ -56,5 +56,27 @@ pub mod Errors {
 
     /// Thrown when campaign ref is emptu
     pub const CAMPAIGN_REF_EMPTY: felt252 = 'Error: Campaign Ref Is Required';
+
+    /// Thrown when donating zero amount to a campaign
+    pub const CANNOT_DENOTE_ZERO_AMOUNT: felt252 = 'Error: Cannot donate nothing';
+
+    // Throw Error when campaign target has reached
+    pub const TARGET_REACHED: felt252 = 'Error: Target Reached';
+
+    // Throw Error when target is not campaign owner
+    pub const CALLER_NOT_CAMPAIGN_OWNER: felt252 = 'Caller is Not Campaign Owner';
+
+    // Throw Error when campaign target has not reached
+    pub const TARGET_NOT_REACHED: felt252 = 'Error: Target Not Reached';
+
+    pub const MORE_THAN_TARGET: felt252 = 'Error: More than Target';
+
+    pub const CAMPAIGN_NOT_CLOSED: felt252 = 'Error: Campaign not closed';
+
+    pub const DOUBLE_WITHDRAWAL: felt252 = 'Error: Double Withdrawal';
+
+    pub const ZERO_ALLOWANCE: felt252 = 'Error: Zero allowance found';
+
+    pub const WITHDRAWAL_FAILED: felt252 = 'Error: Withdraw failed';
 }
 

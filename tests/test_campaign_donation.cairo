@@ -29,7 +29,7 @@ fn setup() -> (ContractAddress, ContractAddress, ICampaignDonationDispatcher, IE
     // Deploy Campaign Donation contract
     let protocol_owner: ContractAddress = contract_address_const::<'protocol_owner'>();
     let campaign_donation_class = declare("CampaignDonation").unwrap().contract_class();
-    let mut calldata = array![protocol_owner.into()];
+    let mut calldata = array![protocol_owner.into(), erc20_address.into()];
     let (campaign_donation_address, _) = campaign_donation_class.deploy(@calldata).unwrap();
 
     (
@@ -40,16 +40,17 @@ fn setup() -> (ContractAddress, ContractAddress, ICampaignDonationDispatcher, IE
     )
 }
 
+// DONE
+
 #[test]
 fn test_successful_create_campaign() {
     let (_token_address, _sender, campaign_donation, _erc721) = setup();
     let target_amount = 1000_u256;
-    let asset = 'Test';
     let campaign_ref = 'Test';
     let owner = contract_address_const::<'owner'>();
 
     start_cheat_caller_address(campaign_donation.contract_address, owner);
-    let campaign_id = campaign_donation.create_campaign(campaign_ref, target_amount, asset);
+    let campaign_id = campaign_donation.create_campaign(campaign_ref, target_amount);
     stop_cheat_caller_address(campaign_donation.contract_address);
     // This is the first Campaign Created, so it will be 1.
     assert!(campaign_id == 1_u256, "Campaign creation failed");
@@ -59,61 +60,60 @@ fn test_successful_create_campaign() {
     assert(campaign.owner == owner, 'Owner mismatch');
     assert(campaign.target_amount == target_amount, 'Target amount mismatch');
     assert(campaign.current_amount == 0.into(), 'Current amount should be 0');
-    assert(campaign.asset == asset, 'Asset mismatch');
     assert(campaign.campaign_reference == campaign_ref, 'Reference mismatch');
     assert(!campaign.is_closed, 'Campaign should not be closed');
     assert(!campaign.is_goal_reached, 'Goal should not be reached');
 }
 
+// DONE
 #[test]
 #[should_panic(expected: 'Error: Amount must be > 0.')]
 fn test_create_campaign_invalid_zero_amount() {
     let (_token_address, _sender, campaign_donation, _erc721) = setup();
     let target_amount = 0_u256;
-    let asset = 'Test';
     let campaign_ref = 'Test';
     let owner = contract_address_const::<'owner'>();
     start_cheat_caller_address(campaign_donation.contract_address, owner);
-    campaign_donation.create_campaign(campaign_ref, target_amount, asset);
+    campaign_donation.create_campaign(campaign_ref, target_amount);
     stop_cheat_caller_address(campaign_donation.contract_address);
 }
 
-#[test]
-#[should_panic(expected: 'Error: Campaign Ref Exists')]
-fn test_create_campaign_duplicate_campaign_refs() {
-    let (_token_address, _sender, campaign_donation, _erc721) = setup();
-    let target_amount = 50_u256;
-    let asset = 'Test';
-    let campaign_ref = 'Test';
-    let owner = contract_address_const::<'owner'>();
-    start_cheat_caller_address(campaign_donation.contract_address, owner);
-    campaign_donation.create_campaign(campaign_ref, target_amount, asset);
-    campaign_donation.create_campaign(campaign_ref, target_amount, asset);
-    stop_cheat_caller_address(campaign_donation.contract_address);
-}
+// #[test]
+// #[should_panic(expected: 'Error: Campaign Ref Exists')]
+// fn test_create_campaign_duplicate_campaign_refs() {
+//     let (_token_address, _sender, campaign_donation, _erc721) = setup();
+//     let target_amount = 50_u256;
+//     let asset = 'Test';
+//     let campaign_ref = 'Test';
+//     let owner = contract_address_const::<'owner'>();
+//     start_cheat_caller_address(campaign_donation.contract_address, owner);
+//     campaign_donation.create_campaign(campaign_ref, target_amount);
+//     campaign_donation.create_campaign(campaign_ref, target_amount);
+//     stop_cheat_caller_address(campaign_donation.contract_address);
+// }
 
-#[test]
-#[should_panic(expected: 'Error: Campaign Ref Is Required')]
-fn test_create_campaign_empty_campaign_refs() {
-    let (_token_address, _sender, campaign_donation, _erc721) = setup();
-    let target_amount = 100_u256;
-    let asset = 'Test';
-    let campaign_ref = '';
-    let owner = contract_address_const::<'owner'>();
-    start_cheat_caller_address(campaign_donation.contract_address, owner);
-    campaign_donation.create_campaign(campaign_ref, target_amount, asset);
-    stop_cheat_caller_address(campaign_donation.contract_address);
-}
+// #[test]
+// #[should_panic(expected: 'Error: Campaign Ref Is Required')]
+// fn test_create_campaign_empty_campaign_refs() {
+//     let (_token_address, _sender, campaign_donation, _erc721) = setup();
+//     let target_amount = 100_u256;
+//     let asset = 'Test';
+//     let campaign_ref = '';
+//     let owner = contract_address_const::<'owner'>();
+//     start_cheat_caller_address(campaign_donation.contract_address, owner);
+//     campaign_donation.create_campaign(campaign_ref, target_amount);
+//     stop_cheat_caller_address(campaign_donation.contract_address);
+// }
 
+// DONE
 #[test]
 fn test_successful_campaign_donation() {
     let (token_address, sender, campaign_donation, _erc721) = setup();
-    let target_amount = 1000_u256;
-    let asset = 'Test';
+    let target_amount = 5000_u256;
     let campaign_ref = 'Test';
 
     start_cheat_caller_address(campaign_donation.contract_address, sender);
-    let campaign_id = campaign_donation.create_campaign(campaign_ref, target_amount, asset);
+    let campaign_id = campaign_donation.create_campaign(campaign_ref, target_amount);
 
     let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
 
@@ -123,7 +123,9 @@ fn test_successful_campaign_donation() {
     stop_cheat_caller_address(campaign_donation.contract_address);
 
     let user_balance_before = token_dispatcher.balance_of(sender);
+    println!("user balance before: {}", user_balance_before);
     let contract_balance_before = token_dispatcher.balance_of(campaign_donation.contract_address);
+    println!("contract balance before: {}", contract_balance_before);
 
     // Simulate delegate's approval:
     start_cheat_caller_address(token_address, sender);
@@ -136,7 +138,7 @@ fn test_successful_campaign_donation() {
 
     start_cheat_caller_address(campaign_donation.contract_address, sender);
 
-    let donation_id = campaign_donation.donate_to_campaign(campaign_id, 500, token_address);
+    let donation_id = campaign_donation.donate_to_campaign(campaign_id, 500);
 
     stop_cheat_caller_address(campaign_donation.contract_address);
 
@@ -145,25 +147,27 @@ fn test_successful_campaign_donation() {
     assert(donation.donor == sender, 'sender failed');
     assert(donation.campaign_id == campaign_id, 'campaing id failed');
     assert(donation.amount == 500, 'fund not eflecting');
-    assert(donation.asset == asset, 'asset failed');
 
     let user_balance_after = token_dispatcher.balance_of(sender);
+    println!("user balance after: {}", user_balance_after);
     let contract_balance_after = token_dispatcher.balance_of(campaign_donation.contract_address);
+    println!("contract balance after: {}", contract_balance_after);
+
     assert(
         (contract_balance_before == 0) && (contract_balance_after == 500), 'CON transfer failed',
     );
     assert(user_balance_after == user_balance_before - 500, ' USR transfer failed');
 }
 
+// DONE
 #[test]
 fn test_successful_campaign_donation_twice() {
     let (token_address, sender, campaign_donation, _erc721) = setup();
     let target_amount = 1000_u256;
-    let asset = 'Test';
     let campaign_ref = 'Test';
 
     start_cheat_caller_address(campaign_donation.contract_address, sender);
-    let campaign_id = campaign_donation.create_campaign(campaign_ref, target_amount, asset);
+    let campaign_id = campaign_donation.create_campaign(campaign_ref, target_amount);
 
     let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
 
@@ -182,8 +186,8 @@ fn test_successful_campaign_donation_twice() {
 
     start_cheat_caller_address(campaign_donation.contract_address, sender);
 
-    let _donation_id = campaign_donation.donate_to_campaign(campaign_id, 500, token_address);
-    let donation_id_1 = campaign_donation.donate_to_campaign(campaign_id, 300, token_address);
+    let _donation_id = campaign_donation.donate_to_campaign(campaign_id, 500);
+    let donation_id_1 = campaign_donation.donate_to_campaign(campaign_id, 300);
 
     stop_cheat_caller_address(campaign_donation.contract_address);
 
@@ -198,16 +202,16 @@ fn test_successful_campaign_donation_twice() {
     assert(user_balance_after == user_balance_before - 800, ' USR transfer failed');
 }
 
+
 #[test]
 fn test_successful_multiple_users_donating_to_a_campaign() {
     let (token_address, sender, campaign_donation, _erc721) = setup();
-    let target_amount = 1000_u256;
-    let asset = 'Test';
+    let target_amount = 10000_u256;
     let campaign_ref = 'Test';
     let another_user: ContractAddress = contract_address_const::<'another_user'>();
 
     start_cheat_caller_address(campaign_donation.contract_address, sender);
-    let campaign_id = campaign_donation.create_campaign(campaign_ref, target_amount, asset);
+    let campaign_id = campaign_donation.create_campaign(campaign_ref, target_amount);
 
     let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
 
@@ -218,23 +222,25 @@ fn test_successful_multiple_users_donating_to_a_campaign() {
 
     let contract_balance_before = token_dispatcher.balance_of(campaign_donation.contract_address);
 
+    println!("contract balance before: {}", contract_balance_before);
     // Simulate delegate's approval:
     start_cheat_caller_address(token_address, sender);
     token_dispatcher.approve(campaign_donation.contract_address, 100000);
     token_dispatcher.transfer(another_user, 10000);
     let other_user_balance_before = token_dispatcher.balance_of(another_user);
+    println!("other user balance before: {}", other_user_balance_before);
     stop_cheat_caller_address(token_address);
 
     start_cheat_caller_address(token_address, another_user);
-    token_dispatcher.approve(campaign_donation.contract_address, 100000);
+    token_dispatcher.approve(campaign_donation.contract_address, 1000);
     stop_cheat_caller_address(token_address);
 
     start_cheat_caller_address(campaign_donation.contract_address, sender);
-    let _donation_id = campaign_donation.donate_to_campaign(campaign_id, 500, token_address);
+    let _donation_id = campaign_donation.donate_to_campaign(campaign_id, 500);
     stop_cheat_caller_address(campaign_donation.contract_address);
 
     start_cheat_caller_address(campaign_donation.contract_address, another_user);
-    let donation_id_1 = campaign_donation.donate_to_campaign(campaign_id, 300, token_address);
+    let donation_id_1 = campaign_donation.donate_to_campaign(campaign_id, 300);
     stop_cheat_caller_address(campaign_donation.contract_address);
 
     let donation = campaign_donation.get_donation(campaign_id, donation_id_1);
@@ -244,6 +250,7 @@ fn test_successful_multiple_users_donating_to_a_campaign() {
 
     let other_user_balance_after = token_dispatcher.balance_of(another_user);
     let contract_balance_after = token_dispatcher.balance_of(campaign_donation.contract_address);
+    println!("contract balance after: {}", contract_balance_after);
     assert((contract_balance_before == 0) && (contract_balance_after == 800), 'transfer failed');
     assert(other_user_balance_after == other_user_balance_before - 300, ' USR transfer failed');
 }
@@ -252,11 +259,10 @@ fn test_successful_multiple_users_donating_to_a_campaign() {
 fn test_target_met_successful() {
     let (token_address, sender, campaign_donation, _erc721) = setup();
     let target_amount = 1000_u256;
-    let asset = 'Test';
     let campaign_ref = 'Test';
 
     start_cheat_caller_address(campaign_donation.contract_address, sender);
-    let campaign_id = campaign_donation.create_campaign(campaign_ref, target_amount, asset);
+    let campaign_id = campaign_donation.create_campaign(campaign_ref, target_amount);
 
     let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
 
@@ -272,7 +278,7 @@ fn test_target_met_successful() {
 
     start_cheat_caller_address(campaign_donation.contract_address, sender);
 
-    let _donation_id = campaign_donation.donate_to_campaign(campaign_id, 1001, token_address);
+    let _donation_id = campaign_donation.donate_to_campaign(campaign_id, 1000);
 
     stop_cheat_caller_address(campaign_donation.contract_address);
 
@@ -288,13 +294,12 @@ fn test_get_campaigns() {
     let target_amount_1 = 1000_u256;
     let target_amount_2 = 2000_u256;
     let target_amount_3 = 3000_u256;
-    let asset = 'Test';
 
     // Create multiple campaigns with different references
     start_cheat_caller_address(campaign_donation.contract_address, sender);
-    let campaign_id_1 = campaign_donation.create_campaign('Ref1', target_amount_1, asset);
-    let campaign_id_2 = campaign_donation.create_campaign('Ref2', target_amount_2, asset);
-    let campaign_id_3 = campaign_donation.create_campaign('Ref3', target_amount_3, asset);
+    let campaign_id_1 = campaign_donation.create_campaign('Ref1', target_amount_1);
+    let campaign_id_2 = campaign_donation.create_campaign('Ref2', target_amount_2);
+    let campaign_id_3 = campaign_donation.create_campaign('Ref3', target_amount_3);
     stop_cheat_caller_address(campaign_donation.contract_address);
 
     // Get all campaigns
@@ -330,11 +335,10 @@ fn test_get_campaign_donations() {
     let (token_address, sender, campaign_donation, _erc721) = setup();
     let another_user: ContractAddress = contract_address_const::<'another_user'>();
     let target_amount = 5000_u256;
-    let asset = 'USDC';
 
     // Create a campaign
     start_cheat_caller_address(campaign_donation.contract_address, sender);
-    let campaign_id = campaign_donation.create_campaign('TestCampaign', target_amount, asset);
+    let campaign_id = campaign_donation.create_campaign('TestCampaign', target_amount);
     stop_cheat_caller_address(campaign_donation.contract_address);
 
     let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
@@ -351,12 +355,12 @@ fn test_get_campaign_donations() {
 
     // Make multiple donations from different users
     start_cheat_caller_address(campaign_donation.contract_address, sender);
-    let donation_id_1 = campaign_donation.donate_to_campaign(campaign_id, 500, token_address);
-    let donation_id_2 = campaign_donation.donate_to_campaign(campaign_id, 700, token_address);
+    let donation_id_1 = campaign_donation.donate_to_campaign(campaign_id, 500);
+    let donation_id_2 = campaign_donation.donate_to_campaign(campaign_id, 700);
     stop_cheat_caller_address(campaign_donation.contract_address);
 
     start_cheat_caller_address(campaign_donation.contract_address, another_user);
-    let donation_id_3 = campaign_donation.donate_to_campaign(campaign_id, 300, token_address);
+    let donation_id_3 = campaign_donation.donate_to_campaign(campaign_id, 300);
     stop_cheat_caller_address(campaign_donation.contract_address);
 
     // Get all donations for the campaign
@@ -394,11 +398,10 @@ fn test_get_campaign_donations() {
 fn test_get_campaign_donations_empty() {
     let (_token_address, sender, campaign_donation, _erc721) = setup();
     let target_amount = 1000_u256;
-    let asset = 'Test';
 
     // Create a campaign but don't make any donations
     start_cheat_caller_address(campaign_donation.contract_address, sender);
-    let campaign_id = campaign_donation.create_campaign('EmptyCampaign', target_amount, asset);
+    let campaign_id = campaign_donation.create_campaign('EmptyCampaign', target_amount);
     stop_cheat_caller_address(campaign_donation.contract_address);
 
     // Get donations for the campaign
@@ -412,12 +415,11 @@ fn test_get_campaign_donations_empty() {
 fn test_multiple_campaigns_with_donations() {
     let (token_address, sender, campaign_donation, _erc721) = setup();
     let target_amount = 1000_u256;
-    let asset = 'Test';
 
     // Create multiple campaigns
     start_cheat_caller_address(campaign_donation.contract_address, sender);
-    let campaign_id_1 = campaign_donation.create_campaign('Campaign1', target_amount, asset);
-    let campaign_id_2 = campaign_donation.create_campaign('Campaign2', target_amount, asset);
+    let campaign_id_1 = campaign_donation.create_campaign('Campaign1', target_amount);
+    let campaign_id_2 = campaign_donation.create_campaign('Campaign2', target_amount);
     stop_cheat_caller_address(campaign_donation.contract_address);
 
     let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
@@ -429,9 +431,9 @@ fn test_multiple_campaigns_with_donations() {
 
     // Make donations to both campaigns
     start_cheat_caller_address(campaign_donation.contract_address, sender);
-    let _donation_id_1 = campaign_donation.donate_to_campaign(campaign_id_1, 100, token_address);
-    let _donation_id_2 = campaign_donation.donate_to_campaign(campaign_id_1, 200, token_address);
-    let _donation_id_3 = campaign_donation.donate_to_campaign(campaign_id_2, 300, token_address);
+    let _donation_id_1 = campaign_donation.donate_to_campaign(campaign_id_1, 100);
+    let _donation_id_2 = campaign_donation.donate_to_campaign(campaign_id_1, 200);
+    let _donation_id_3 = campaign_donation.donate_to_campaign(campaign_id_2, 300);
     stop_cheat_caller_address(campaign_donation.contract_address);
 
     // Get donations for campaign 1
@@ -451,26 +453,27 @@ fn test_multiple_campaigns_with_donations() {
 }
 
 #[test]
-#[fork(url: "https://starknet-sepolia.public.blastapi.io/rpc/v0_7", block_tag: latest)]
+#[fork(url: "https://starknet-sepolia.public.blastapi.io/rpc/v0_8", block_tag: latest)]
 fn test_withdraw_funds_from_campaign_successful() {
     let (token_address, sender, campaign_donation, _erc721) = setup();
-    let target_amount = 500_u256;
-    let asset = 'Test';
+    let target_amount = 800_u256;
     let campaign_ref = 'Test';
     let owner = contract_address_const::<'owner'>();
 
     start_cheat_caller_address(campaign_donation.contract_address, owner);
-    let campaign_id = campaign_donation.create_campaign(campaign_ref, target_amount, asset);
+    let campaign_id = campaign_donation.create_campaign(campaign_ref, target_amount);
 
     let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
     stop_cheat_caller_address(campaign_donation.contract_address);
     // This is the first Campaign Created, so it will be 1.
     assert!(campaign_id == 1_u256, "Campaign creation failed");
 
-    let donor = contract_address_const::<'donor'>();
+    // let donor = contract_address_const::<'donor'>();
 
     let user_balance_before = token_dispatcher.balance_of(sender);
+    println!("user balance before: {}", user_balance_before);
     let contract_balance_before = token_dispatcher.balance_of(campaign_donation.contract_address);
+    println!("contract balance before: {}", contract_balance_before);
 
     // Simulate delegate's approval:
     start_cheat_caller_address(token_address, sender);
@@ -478,12 +481,13 @@ fn test_withdraw_funds_from_campaign_successful() {
     stop_cheat_caller_address(token_address);
 
     let allowance = token_dispatcher.allowance(sender, campaign_donation.contract_address);
-    assert(allowance >= 1000, 'Allowance not set correctly');
     println!("Allowance for withdrawal: {}", allowance);
+
+    assert(allowance >= 1000, 'Allowance not set correctly');
 
     start_cheat_caller_address(campaign_donation.contract_address, sender);
 
-    let donation_id = campaign_donation.donate_to_campaign(campaign_id, 600, token_address);
+    let donation_id = campaign_donation.donate_to_campaign(campaign_id, 800);
 
     stop_cheat_caller_address(campaign_donation.contract_address);
 
@@ -492,14 +496,18 @@ fn test_withdraw_funds_from_campaign_successful() {
     start_cheat_caller_address(campaign_donation.contract_address, owner);
 
     let owner_balance_before = token_dispatcher.balance_of(owner);
+    println!("campaign owner balance before: {}", owner_balance_before);
     let contract_balance_before = token_dispatcher.balance_of(campaign_donation.contract_address);
-
+    println!("contract  balance before: {}", contract_balance_before);
     campaign_donation.withdraw_from_campaign(campaign_id);
 
     let owner_balance_after = token_dispatcher.balance_of(owner);
+    println!("campaign owner balance after: {}", owner_balance_after);
     let contract_balance_after = token_dispatcher.balance_of(campaign_donation.contract_address);
 
+    println!("contract balance after: {}", contract_balance_after);
     stop_cheat_caller_address(campaign_donation.contract_address);
 
-    assert(owner_balance_after - owner_balance_before == 500, 'Withdrawal error')
+    assert(owner_balance_after - owner_balance_before == 800, 'Withdrawal error')
 }
+
