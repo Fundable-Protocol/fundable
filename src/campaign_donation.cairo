@@ -31,7 +31,6 @@ pub mod CampaignDonation {
     impl OwnableInternalImpl = OwnableComponent::InternalImpl<ContractState>;
     impl UpgradeableInternalImpl = UpgradeableComponent::InternalImpl<ContractState>;
 
-
     #[storage]
     struct Storage {
         #[substorage(v0)]
@@ -49,7 +48,6 @@ pub mod CampaignDonation {
         donation_token: ContractAddress,
     }
 
-
     #[event]
     #[derive(Drop, starknet::Event)]
     enum Event {
@@ -61,7 +59,6 @@ pub mod CampaignDonation {
         #[flat]
         UpgradeableEvent: UpgradeableComponent::Event,
     }
-
 
     #[derive(Drop, starknet::Event)]
     pub struct Campaign {
@@ -76,7 +73,6 @@ pub mod CampaignDonation {
         #[key]
         pub timestamp: u64,
     }
-
 
     #[derive(Drop, starknet::Event)]
     pub struct Donation {
@@ -187,7 +183,7 @@ pub mod CampaignDonation {
             // Create donation record
             let donation = Donations { donation_id, donor, campaign_id, amount };
 
-            // Properly append to the Vec using push
+            
             self.donations.entry(campaign_id).push(donation);
 
             self.donation_count.write(donation_id);
@@ -201,7 +197,6 @@ pub mod CampaignDonation {
 
             donation_id
         }
-
 
         fn withdraw_from_campaign(ref self: ContractState, campaign_id: u256) {
             let caller = get_caller_address();
@@ -238,6 +233,52 @@ pub mod CampaignDonation {
                         },
                     ),
                 );
+        }
+
+        /// Batch donations to multiple campaigns
+        /// All-or-Nothing approach: if any donation fails, entire transaction reverts
+        fn batch_donate(
+            ref self: ContractState,
+            campaign_amounts: Array<(u256, u256)>
+        ) {
+            const MAX_BATCH_SIZE: u32 = 20;
+            
+            // Input validation
+            assert(campaign_amounts.len() > 0, 'Empty campaign array');
+            assert(campaign_amounts.len() <= MAX_BATCH_SIZE, 'Batch size too large');
+            
+            let donor = get_caller_address();
+            let contract_address = get_contract_address();
+            
+            // STEP 1: Validate all campaigns and calculate total amount
+            let total_amount = self._validate_and_calculate_total(@campaign_amounts);
+            assert(total_amount > 0, 'Total amount must be > 0');
+            
+            // STEP 2: Token approval and balance checks
+            let donation_token = self.donation_token.read();
+            let token_dispatcher = IERC20Dispatcher { contract_address: donation_token };
+            
+            let donor_balance = token_dispatcher.balance_of(donor);
+            assert(donor_balance >= total_amount, 'Insufficient balance');
+            
+            let allowance = token_dispatcher.allowance(donor, contract_address);
+            assert(allowance >= total_amount, 'Insufficient allowance');
+            
+            // STEP 3: Single transfer for all donations (optimization)
+            let transfer_success = token_dispatcher.transfer_from(
+                donor, 
+                contract_address, 
+                total_amount
+            );
+            assert(transfer_success, 'Transfer failed');
+            
+            // STEP 4: Process all donations
+            let mut i = 0;
+            while i < campaign_amounts.len() {
+                let (campaign_id, amount) = *campaign_amounts.at(i);
+                self._process_internal_donation(donor, campaign_id, amount);
+                i += 1;
+            };
         }
 
         fn get_donation(self: @ContractState, campaign_id: u256, donation_id: u256) -> Donations {
@@ -328,6 +369,81 @@ pub mod CampaignDonation {
             }
 
             token_address
+        }
+
+        fn _validate_and_calculate_total(
+            self: @ContractState, 
+            campaign_amounts: @Array<(u256, u256)>
+        ) -> u256 {
+            let mut total: u256 = 0;
+            let mut i = 0;
+            
+            while i < campaign_amounts.len() {
+                let (campaign_id, amount) = *campaign_amounts.at(i);
+                
+                // Validate donation amount > 0
+                assert(amount > 0, 'Amount must be > 0');
+                
+                // Validate campaign exists
+                let campaign = self.campaigns.read(campaign_id);
+                assert(!campaign.owner.is_zero(), 'Campaign does not exist');
+                
+                // Check campaign is active (not closed/goal reached)
+                assert(!campaign.is_closed, 'Campaign is closed');
+                assert(!campaign.is_goal_reached, 'Campaign goal reached');
+                
+                // Check for integer overflow in total calculation
+                let new_total = total + amount;
+                assert(new_total >= total, 'Amount overflow');
+                total = new_total;
+                
+                i += 1;
+            };
+            
+            total
+        }
+
+        fn _process_internal_donation(
+            ref self: ContractState,
+            donor: ContractAddress,
+            campaign_id: u256,
+            amount: u256
+        ) {
+            let mut campaign = self.campaigns.read(campaign_id);
+            let timestamp = get_block_timestamp();
+            
+            // Calculate actual donation amount (don't exceed target)
+            let remaining_amount = campaign.target_amount - campaign.current_balance;
+            let actual_amount = if amount > remaining_amount { remaining_amount } else { amount };
+            
+            // Get next donation ID
+            let donation_id = self.donation_count.read() + 1;
+            
+            // Update campaign amount
+            campaign.current_balance = campaign.current_balance + actual_amount;
+            
+            // If goal reached, mark as closed
+            if campaign.current_balance >= campaign.target_amount {
+                campaign.is_goal_reached = true;
+                campaign.is_closed = true;
+            }
+            
+            self.campaigns.write(campaign_id, campaign);
+            
+            // Create donation record
+            let donation = Donations { donation_id, donor, campaign_id, amount: actual_amount };
+            
+            // Properly append to the Vec using push
+            self.donations.entry(campaign_id).push(donation);
+            
+            self.donation_count.write(donation_id);
+            
+            // Update the per-campaign donation count
+            let campaign_donation_count = self.donation_counts.read(campaign_id);
+            self.donation_counts.write(campaign_id, campaign_donation_count + 1);
+            
+            // Emit donation event for each successful donation
+            self.emit(Event::Donation(Donation { donor, campaign_id, amount: actual_amount, timestamp }));
         }
     }
 }
