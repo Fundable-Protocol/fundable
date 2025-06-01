@@ -128,3 +128,14 @@ pub struct CampaignWithdrawal {
     pub campaign_id: u256,
     pub amount: u256,
 }
+
+#[derive(Copy, Drop, Serde, starknet::Store)]
+pub struct DonationMetadata {
+    pub campaign_id: u256,
+    pub campaign_name: felt252,
+    pub campaign_owner: ContractAddress,
+    pub donation_id: u256,
+    pub donor: ContractAddress,
+    pub amount: u256,
+    pub timestamp: u64,
+}
