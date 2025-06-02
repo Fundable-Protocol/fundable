@@ -6,6 +6,27 @@ use crate::base::types::{Campaigns, Donations};
 ///
 /// This interface defines the core functionality for managing crowdfunding campaigns,
 /// including creating campaigns, accepting donations, and withdrawing funds.
+
+// Structures for batch donations
+
+#[derive(Drop, Serde, Clone)]
+pub struct DonationResult {
+    pub campaign_id: u256,
+    pub amount: u256,
+    pub success: bool,
+    pub donation_id: u256,
+}
+
+#[derive(Drop, starknet::Event)]
+pub struct BatchDonationProcessed {
+    #[key]
+    pub donor: ContractAddress,
+    pub total_campaigns: u32,
+    pub successful_donations: u32,
+    pub total_amount: u256,
+    pub results: Array<DonationResult>,
+}
+
 #[starknet::interface]
 pub trait ICampaignDonation<TContractState> {
     // *************************************************************************
@@ -66,6 +87,43 @@ pub trait ICampaignDonation<TContractState> {
     /// * Emits a CampaignWithdrawal event
     fn withdraw_from_campaign(ref self: TContractState, campaign_id: u256);
 
+    /// Batch donations to multiple campaigns in a single transaction
+    /// Uses All-or-Nothing approach: if any donation fails, entire transaction reverts
+    ///
+    /// # Arguments
+    /// * `campaign_amounts` - Array of (campaign_id, amount) tuples
+    ///
+    /// # Requirements
+    /// * Array must not be empty and must not exceed MAX_BATCH_SIZE (20)
+    /// * All campaign IDs must exist and be active
+    /// * Total donation amount must not exceed donor's balance and allowance
+    /// * All donation amounts must be > 0
+    ///
+    /// # Behavior
+    /// * Individual donations that exceed remaining campaign target will be auto-capped
+    /// * Unlike single donations, excess amounts are automatically reduced rather than rejected
+    /// * Single token transfer is made for the total actual amount (after capping)
+    /// * All campaigns are processed atomically
+    /// * Validation accounts for cumulative donations within the batch to same campaigns
+    ///
+    /// # Effects
+    /// * Single token transfer for total amount from donor to contract
+    /// * All donations processed atomically (all-or-nothing)
+    /// * Updates all campaign balances and creates donation records
+    /// * May complete campaigns if targets are reached
+    /// * Emits individual Donation events for each successful donation
+    /// * Emits one BatchDonationProcessed event with comprehensive batch summary
+    ///
+    /// # Note on Auto-Capping
+    /// The auto-capping behavior differs from single donations to provide better UX
+    /// for batch operations where users may not know exact remaining amounts.
+    /// If amount exceeds the remaining needed to hit campaign.target_amount,
+    /// it is automatically reduced to that remaining amount.
+    fn batch_donate(
+        ref self: TContractState,
+        campaign_amounts: Array<(u256, u256)> // Array of (campaign_id, amount)
+    );
+
     // *************************************************************************
     //                              GETTER FUNCTIONS
     // *************************************************************************
@@ -103,135 +161,133 @@ pub trait ICampaignDonation<TContractState> {
     /// # Returns
     /// * `Array<Donations>` - An array of all donations made to the campaign
     fn get_campaign_donations(self: @TContractState, campaign_id: u256) -> Array<Donations>;
+
     // *************************************************************************
-//                        USER EXPERIENCE ENHANCEMENTS
-// *************************************************************************
+    //                        USER EXPERIENCE ENHANCEMENTS
+    // *************************************************************************
 
     /// Gets all active (non-closed) campaigns
-///
-/// # Returns
-/// * `Array<Campaigns>` - Array of campaigns that are still accepting donations
-// fn get_active_campaigns(self: @TContractState) -> Array<Campaigns>;
+    ///
+    /// # Returns
+    /// * `Array<Campaigns>` - Array of campaigns that are still accepting donations
+    // fn get_active_campaigns(self: @TContractState) -> Array<Campaigns>;
 
     /// Gets all campaigns created by a specific address
-///
-/// # Arguments
-/// * `owner` - The address of the campaign creator
-///
-/// # Returns
-/// * `Array<Campaigns>` - Array of campaigns created by the owner
-// fn get_campaigns_by_owner(self: @TContractState, owner: ContractAddress) -> Array<Campaigns>;
+    ///
+    /// # Arguments
+    /// * `owner` - The address of the campaign creator
+    ///
+    /// # Returns
+    /// * `Array<Campaigns>` - Array of campaigns created by the owner
+    // fn get_campaigns_by_owner(self: @TContractState, owner: ContractAddress) -> Array<Campaigns>;
 
     /// Gets a campaign by its unique reference identifier
-///
-/// # Arguments
-/// * `campaign_ref` - The unique 5-character campaign reference
-///
-/// # Returns
-/// * `Option<Campaigns>` - The campaign if found, None otherwise
-// fn get_campaign_by_ref(self: @TContractState, campaign_ref: felt252) -> Option<Campaigns>;
+    ///
+    /// # Arguments
+    /// * `campaign_ref` - The unique 5-character campaign reference
+    ///
+    /// # Returns
+    /// * `Option<Campaigns>` - The campaign if found, None otherwise
+    // fn get_campaign_by_ref(self: @TContractState, campaign_ref: felt252) -> Option<Campaigns>;
 
     // *************************************************************************
-//                           DONOR EXPERIENCE
-// *************************************************************************
+    //                           DONOR EXPERIENCE
+    // *************************************************************************
 
     /// Gets all donations made by a specific donor across all campaigns
-///
-/// # Arguments
-/// * `donor` - The address of the donor
-///
-/// # Returns
-/// * `Array<(u256, Donations)>` - Array of tuples (campaign_id, donation)
-// fn get_donations_by_donor(self: @TContractState, donor: ContractAddress) -> Array<(u256,
-// Donations)>;
+    ///
+    /// # Arguments
+    /// * `donor` - The address of the donor
+    ///
+    /// # Returns
+    /// * `Array<(u256, Donations)>` - Array of tuples (campaign_id, donation)
+    // fn get_donations_by_donor(self: @TContractState, donor: ContractAddress) -> Array<(u256, Donations)>;
 
     /// Gets the total amount donated by a specific address
-///
-/// # Arguments
-/// * `donor` - The address of the donor
-///
-/// # Returns
-/// * `u256` - Total amount donated across all campaigns
-// fn get_total_donated_by_donor(self: @TContractState, donor: ContractAddress) -> u256;
+    ///
+    /// # Arguments
+    /// * `donor` - The address of the donor
+    ///
+    /// # Returns
+    /// * `u256` - Total amount donated across all campaigns
+    // fn get_total_donated_by_donor(self: @TContractState, donor: ContractAddress) -> u256;
 
     /// Checks if a donor has contributed to a specific campaign
-///
-/// # Arguments
-/// * `campaign_id` - The campaign ID
-/// * `donor` - The donor address
-///
-/// # Returns
-/// * `bool` - True if the donor has contributed, false otherwise
-// fn has_donated_to_campaign(self: @TContractState, campaign_id: u256, donor: ContractAddress)
-// -> bool;
+    ///
+    /// # Arguments
+    /// * `campaign_id` - The campaign ID
+    /// * `donor` - The donor address
+    ///
+    /// # Returns
+    /// * `bool` - True if the donor has contributed, false otherwise
+    // fn has_donated_to_campaign(self: @TContractState, campaign_id: u256, donor: ContractAddress) -> bool;
 
     // *************************************************************************
-//                        CAMPAIGN MANAGEMENT
-// *************************************************************************
+    //                        CAMPAIGN MANAGEMENT
+    // *************************************************************************
 
     /// Updates the target amount for a campaign (only by owner before any donations)
-///
-/// # Arguments
-/// * `campaign_id` - The campaign ID
-/// * `new_target` - The new target amount
-///
-/// # Requirements
-/// * Caller must be campaign owner
-/// * Campaign must have zero balance
-/// * New target must be greater than zero
-// fn update_campaign_target(ref self: TContractState, campaign_id: u256, new_target: u256);
+    ///
+    /// # Arguments
+    /// * `campaign_id` - The campaign ID
+    /// * `new_target` - The new target amount
+    ///
+    /// # Requirements
+    /// * Caller must be campaign owner
+    /// * Campaign must have zero balance
+    /// * New target must be greater than zero
+    // fn update_campaign_target(ref self: TContractState, campaign_id: u256, new_target: u256);
 
     /// Cancels a campaign and enables refunds (only if no withdrawals have occurred)
-///
-/// # Arguments
-/// * `campaign_id` - The campaign ID
-///
-/// # Requirements
-/// * Caller must be campaign owner
-/// * Campaign must not be withdrawn
-/// * Campaign must not have reached its goal
-// fn cancel_campaign(ref self: TContractState, campaign_id: u256);
+    ///
+    /// # Arguments
+    /// * `campaign_id` - The campaign ID
+    ///
+    /// # Requirements
+    /// * Caller must be campaign owner
+    /// * Campaign must not be withdrawn
+    /// * Campaign must not have reached its goal
+    // fn cancel_campaign(ref self: TContractState, campaign_id: u256);
 
     /// Allows donors to claim refunds from cancelled campaigns
-///
-/// # Arguments
-/// * `campaign_id` - The campaign ID
-///
-/// # Requirements
-/// * Campaign must be cancelled
-/// * Caller must have donated to the campaign
-/// * Refund must not have been claimed already
-// fn claim_refund(ref self: TContractState, campaign_id: u256);
+    ///
+    /// # Arguments
+    /// * `campaign_id` - The campaign ID
+    ///
+    /// # Requirements
+    /// * Campaign must be cancelled
+    /// * Caller must have donated to the campaign
+    /// * Refund must not have been claimed already
+    // fn claim_refund(ref self: TContractState, campaign_id: u256);
 
     // *************************************************************************
-//                        ANALYTICS & INSIGHTS
-// *************************************************************************
+    //                        ANALYTICS & INSIGHTS
+    // *************************************************************************
 
     /// Gets the progress percentage of a campaign
-///
-/// # Arguments
-/// * `campaign_id` - The campaign ID
-///
-/// # Returns
-/// * `u8` - Progress percentage (0-100)
-// fn get_campaign_progress(self: @TContractState, campaign_id: u256) -> u8;
+    ///
+    /// # Arguments
+    /// * `campaign_id` - The campaign ID
+    ///
+    /// # Returns
+    /// * `u8` - Progress percentage (0-100)
+    // fn get_campaign_progress(self: @TContractState, campaign_id: u256) -> u8;
 
     /// Gets the number of unique donors for a campaign
-///
-/// # Arguments
-/// * `campaign_id` - The campaign ID
-///
-/// # Returns
-/// * `u32` - Number of unique donors
-// fn get_campaign_donor_count(self: @TContractState, campaign_id: u256) -> u32;
+    ///
+    /// # Arguments
+    /// * `campaign_id` - The campaign ID
+    ///
+    /// # Returns
+    /// * `u32` - Number of unique donors
+    // fn get_campaign_donor_count(self: @TContractState, campaign_id: u256) -> u32;
 
     /// Gets campaigns close to reaching their goal
-///
-/// # Arguments
-/// * `threshold_percentage` - Minimum progress percentage (e.g., 80 for 80%+)
-///
-/// # Returns
-/// * `Array<Campaigns>` - Array of campaigns near completion
-// fn get_campaigns_near_goal(self: @TContractState, threshold_percentage: u8) ->
-// Array<Campaigns>;
+    ///
+    /// # Arguments
+    /// * `threshold_percentage` - Minimum progress percentage (e.g., 80 for 80%+)
+    ///
+    /// # Returns
+    /// * `Array<Campaigns>` - Array of campaigns near completion
+    // fn get_campaigns_near_goal(self: @TContractState, threshold_percentage: u8) -> Array<Campaigns>;
 }
