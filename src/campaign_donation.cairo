@@ -47,6 +47,10 @@ pub mod CampaignDonation {
         campaign_closed: Map<u256, bool>, // Map campaign ids to closing boolean
         campaign_withdrawn: Map<u256, bool>, //Map campaign ids to whether they have been withdrawn
         donation_token: ContractAddress,
+        unique_donors_count: Map<u256, u32>, // Number of unique donors per campaign
+        campaign_donors: Map<
+            (u256, ContractAddress), bool,
+        > // Track if an address has donated to a campaign
     }
 
 
@@ -182,6 +186,15 @@ pub mod CampaignDonation {
                 campaign.is_closed = true;
             }
 
+            // Check if this is the donor's first donation to this campaign
+            if !self.campaign_donors.read((campaign_id, donor)) {
+                // Mark that this address has donated to this campaign
+                self.campaign_donors.write((campaign_id, donor), true);
+                // Increment the unique donors count
+                let current_count = self.unique_donors_count.read(campaign_id);
+                self.unique_donors_count.write(campaign_id, current_count + 1);
+            }
+
             self.campaigns.write(campaign_id, campaign);
 
             // Create donation record
@@ -295,6 +308,32 @@ pub mod CampaignDonation {
         fn get_campaign(self: @ContractState, campaign_id: u256) -> Campaigns {
             let campaign: Campaigns = self.campaigns.read(campaign_id);
             campaign
+        }
+        fn get_campaign_progress(self: @ContractState, campaign_id: u256) -> u8 {
+            let campaign: Campaigns = self.campaigns.read(campaign_id);
+            if campaign.target_amount == 0 {
+                return 0_u8;
+            }
+
+            let progress = (campaign.current_balance * 100) / campaign.target_amount;
+
+            // // Cap at 100% for overfunded campaigns
+            if progress > 100_u256 {
+                return 100_u8;
+            }
+
+            // Convert the calculated progress to u8 using try_into().
+            // This is a fallible conversion. unwrap() will panic if the value > 255.
+            let progress_u8: u8 = progress.try_into().unwrap();
+
+            // Return the u8 value.
+            progress_u8
+        }
+
+
+        fn get_campaign_donor_count(self: @ContractState, campaign_id: u256) -> u32 {
+            // Simply return the stored count of unique donors
+            self.unique_donors_count.read(campaign_id)
         }
     }
 
