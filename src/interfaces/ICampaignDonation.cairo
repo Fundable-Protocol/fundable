@@ -7,7 +7,7 @@ use crate::base::types::{Campaigns, Donations};
 /// This interface defines the core functionality for managing crowdfunding campaigns,
 /// including creating campaigns, accepting donations, and withdrawing funds.
 
-//  structures for batch donations
+// Structures for batch donations
 
 #[derive(Drop, Serde, Clone)]
 pub struct DonationResult {
@@ -17,9 +17,9 @@ pub struct DonationResult {
     pub donation_id: u256,
 }
 
-
 #[derive(Drop, starknet::Event)]
 pub struct BatchDonationProcessed {
+    #[key]
     pub donor: ContractAddress,
     pub total_campaigns: u32,
     pub successful_donations: u32,
@@ -87,24 +87,38 @@ pub trait ICampaignDonation<TContractState> {
     /// * Emits a CampaignWithdrawal event
     fn withdraw_from_campaign(ref self: TContractState, campaign_id: u256);
 
-    /// Batch donations to multiple campaigns
+    /// Batch donations to multiple campaigns in a single transaction
+    /// Uses All-or-Nothing approach: if any donation fails, entire transaction reverts
     ///
     /// # Arguments
     /// * `campaign_amounts` - Array of (campaign_id, amount) tuples
     ///
     /// # Requirements
-    /// * Array must not be empty
-    /// * Array size must not exceed maximum batch size (20)
-    /// * Donor must have sufficient token balance for total amount
-    /// * Donor must have approved contract for total amount
-    /// * All campaigns must be valid and active
+    /// * Array must not be empty and must not exceed MAX_BATCH_SIZE (20)
+    /// * All campaign IDs must exist and be active
+    /// * Total donation amount must not exceed donor's balance and allowance
     /// * All donation amounts must be > 0
     ///
+    /// # Behavior
+    /// * Individual donations that exceed remaining campaign target will be auto-capped
+    /// * Unlike single donations, excess amounts are automatically reduced rather than rejected
+    /// * Single token transfer is made for the total actual amount (after capping)
+    /// * All campaigns are processed atomically
+    /// * Validation accounts for cumulative donations within the batch to same campaigns
+    ///
     /// # Effects
-    /// * Single token transfer for total amount
+    /// * Single token transfer for total amount from donor to contract
     /// * All donations processed atomically (all-or-nothing)
-    /// * If any donation fails, entire transaction reverts
-    /// * Events emitted for successful batch
+    /// * Updates all campaign balances and creates donation records
+    /// * May complete campaigns if targets are reached
+    /// * Emits individual Donation events for each successful donation
+    /// * Emits one BatchDonationProcessed event with comprehensive batch summary
+    ///
+    /// # Note on Auto-Capping
+    /// The auto-capping behavior differs from single donations to provide better UX
+    /// for batch operations where users may not know exact remaining amounts.
+    /// If amount exceeds the remaining needed to hit campaign.target_amount,
+    /// it is automatically reduced to that remaining amount.
     fn batch_donate(
         ref self: TContractState,
         campaign_amounts: Array<(u256, u256)> // Array of (campaign_id, amount)
