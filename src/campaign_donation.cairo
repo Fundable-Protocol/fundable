@@ -316,12 +316,19 @@ pub mod CampaignDonation {
                 i += 1;
             };
             
-            // Emit batch event
+            // CRITICAL FIX: Refund any excess if actual total is less than transferred amount
+            if actual_total_amount < total_amount {
+                let refund_amount = total_amount - actual_total_amount;
+                let refund_success = token_dispatcher.transfer(donor, refund_amount);
+                assert(refund_success, 'Refund failed');
+            }
+            
+            // Emit batch event (use actual amount, not pre-calculated amount)
             self.emit(Event::BatchDonationProcessed(BatchDonationProcessed {
                 donor,
                 total_campaigns: campaign_amounts.len(),
                 successful_donations,
-                total_amount: actual_total_amount,
+                total_amount: actual_total_amount,  // Use actual amount, not pre-calculated
                 results
             }));
         }
