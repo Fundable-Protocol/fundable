@@ -511,3 +511,185 @@ fn test_withdraw_funds_from_campaign_successful() {
     assert(owner_balance_after - owner_balance_before == 800, 'Withdrawal error')
 }
 
+#[test]
+fn test_update_campaign_target_successful() {
+    let (_token_address, sender, campaign_donation, _erc721) = setup();
+    let target_amount = 1000_u256;
+    let new_target = 2000_u256;
+
+    // Create campaign
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let campaign_id = campaign_donation.create_campaign('Test', target_amount);
+    
+    // Update target
+    campaign_donation.update_campaign_target(campaign_id, new_target);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Verify update
+    let campaign = campaign_donation.get_campaign(campaign_id);
+    assert(campaign.target_amount == new_target, 'Target not updated');
+}
+
+#[test]
+#[should_panic(expected: 'Error: Campaign Not Found')]
+fn test_update_campaign_target_nonexistent() {
+    let (_token_address, sender, campaign_donation, _erc721) = setup();
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    campaign_donation.update_campaign_target(999, 2000);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+}
+
+#[test]
+#[should_panic(expected: 'Caller is Not Campaign Owner')]
+fn test_update_campaign_target_not_owner() {
+    let (_token_address, sender, campaign_donation, _erc721) = setup();
+    let other_user: ContractAddress = contract_address_const::<'other_user'>();
+    
+    // Create campaign as sender
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let campaign_id = campaign_donation.create_campaign('Test', 1000);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+    
+    // Try to update as other user
+    start_cheat_caller_address(campaign_donation.contract_address, other_user);
+    campaign_donation.update_campaign_target(campaign_id, 2000);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+}
+
+#[test]
+#[should_panic(expected: 'Error: Campaign has donations')]
+fn test_update_campaign_target_with_donations() {
+    let (token_address, sender, campaign_donation, _erc721) = setup();
+    let target_amount = 1000_u256;
+    
+    // Create campaign and make donation
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let campaign_id = campaign_donation.create_campaign('Test', target_amount);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+    
+    // Approve and donate
+    let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
+    start_cheat_caller_address(token_address, sender);
+    token_dispatcher.approve(campaign_donation.contract_address, 1000);
+    stop_cheat_caller_address(token_address);
+    
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    campaign_donation.donate_to_campaign(campaign_id, 500);
+    
+    // Try to update target
+    campaign_donation.update_campaign_target(campaign_id, 2000);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+}
+
+#[test]
+fn test_cancel_campaign_successful() {
+    let (_token_address, sender, campaign_donation, _erc721) = setup();
+    
+    // Create campaign
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let campaign_id = campaign_donation.create_campaign('Test', 1000);
+    
+    // Cancel campaign
+    campaign_donation.cancel_campaign(campaign_id);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+    
+    // Verify cancellation
+    let campaign = campaign_donation.get_campaign(campaign_id);
+    assert(campaign.is_closed, 'Campaign not closed');
+    assert!(!campaign.is_goal_reached, "Campaign goal should not be reached");
+}
+
+#[test]
+#[should_panic(expected: 'Error: Campaign closed')]
+fn test_cancel_campaign_already_closed() {
+    let (_token_address, sender, campaign_donation, _erc721) = setup();
+    
+    // Create and cancel campaign
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let campaign_id = campaign_donation.create_campaign('Test', 1000);
+    campaign_donation.cancel_campaign(campaign_id);
+    
+    // Try to cancel again
+    campaign_donation.cancel_campaign(campaign_id);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+}
+
+#[test]
+fn test_claim_refund_successful() {
+    let (token_address, sender, campaign_donation, _erc721) = setup();
+    let target_amount = 1000_u256;
+    
+    // Create campaign
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let campaign_id = campaign_donation.create_campaign('Test', target_amount);
+    
+    // Make donation
+    let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
+    start_cheat_caller_address(token_address, sender);
+    token_dispatcher.approve(campaign_donation.contract_address, 1000);
+    stop_cheat_caller_address(token_address);
+    
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    campaign_donation.donate_to_campaign(campaign_id, 500);
+    
+    // Cancel campaign
+    campaign_donation.cancel_campaign(campaign_id);
+    
+    // Claim refund
+    let balance_before = token_dispatcher.balance_of(sender);
+    campaign_donation.claim_refund(campaign_id);
+    let balance_after = token_dispatcher.balance_of(sender);
+    
+    stop_cheat_caller_address(campaign_donation.contract_address);
+    
+    // Verify refund
+    assert(balance_after - balance_before == 500, 'Refund amount incorrect');
+    let campaign = campaign_donation.get_campaign(campaign_id);
+    assert(campaign.is_cancelled, 'Campaign not cancelled');
+}
+
+#[test]
+#[should_panic(expected: 'Error: Refund already claimed')]
+fn test_claim_refund_twice() {
+    let (token_address, sender, campaign_donation, _erc721) = setup();
+    
+    // Create campaign and make donation
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let campaign_id = campaign_donation.create_campaign('Test', 1000);
+    
+    let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
+    start_cheat_caller_address(token_address, sender);
+    token_dispatcher.approve(campaign_donation.contract_address, 1000);
+    stop_cheat_caller_address(token_address);
+    
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    campaign_donation.donate_to_campaign(campaign_id, 500);
+    
+    // Cancel and claim refund
+    campaign_donation.cancel_campaign(campaign_id);
+    campaign_donation.claim_refund(campaign_id);
+    
+    // Try to claim again
+    campaign_donation.claim_refund(campaign_id);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+}
+
+#[test]
+#[should_panic(expected: 'Error: Donation not found')]
+fn test_claim_refund_no_donation() {
+    let (_token_address, sender, campaign_donation, _erc721) = setup();
+    let other_user: ContractAddress = contract_address_const::<'other_user'>();
+    
+    // Create campaign
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let campaign_id = campaign_donation.create_campaign('Test', 1000);
+    
+    // Cancel campaign
+    campaign_donation.cancel_campaign(campaign_id);
+    
+    // Try to claim refund as non-donor
+    start_cheat_caller_address(campaign_donation.contract_address, other_user);
+    campaign_donation.claim_refund(campaign_id);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+}
+

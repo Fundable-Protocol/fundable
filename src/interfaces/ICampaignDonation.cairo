@@ -170,38 +170,38 @@ pub trait ICampaignDonation<TContractState> {
 // *************************************************************************
 
     /// Updates the target amount for a campaign (only by owner before any donations)
-///
-/// # Arguments
-/// * `campaign_id` - The campaign ID
-/// * `new_target` - The new target amount
-///
-/// # Requirements
-/// * Caller must be campaign owner
-/// * Campaign must have zero balance
-/// * New target must be greater than zero
-// fn update_campaign_target(ref self: TContractState, campaign_id: u256, new_target: u256);
+    ///
+    /// # Arguments
+    /// * `campaign_id` - The campaign ID
+    /// * `new_target` - The new target amount
+    ///
+    /// # Requirements
+    /// * Caller must be campaign owner
+    /// * Campaign must have zero balance
+    /// * New target must be greater than zero
+    fn update_campaign_target(ref self: TContractState, campaign_id: u256, new_target: u256);
 
-    /// Cancels a campaign and enables refunds (only if no withdrawals have occurred)
-///
-/// # Arguments
-/// * `campaign_id` - The campaign ID
-///
-/// # Requirements
-/// * Caller must be campaign owner
-/// * Campaign must not be withdrawn
-/// * Campaign must not have reached its goal
-// fn cancel_campaign(ref self: TContractState, campaign_id: u256);
+    //     / Cancels a campaign and enables refunds (only if no withdrawals have occurred)
+    // /
+    // / # Arguments
+    // / * `campaign_id` - The campaign ID
+    // /
+    // / # Requirements
+    // / * Caller must be campaign owner
+    // / * Campaign must not be withdrawn
+    // / * Campaign must not have reached its goal
+    fn cancel_campaign(ref self: TContractState, campaign_id: u256);
 
-    /// Allows donors to claim refunds from cancelled campaigns
-///
-/// # Arguments
-/// * `campaign_id` - The campaign ID
-///
-/// # Requirements
-/// * Campaign must be cancelled
-/// * Caller must have donated to the campaign
-/// * Refund must not have been claimed already
-// fn claim_refund(ref self: TContractState, campaign_id: u256);
+    //     / Allows donors to claim refunds from cancelled campaigns
+    // /
+    // / # Arguments
+    // / * `campaign_id` - The campaign ID
+    // /
+    // / # Requirements
+    // / * Campaign must be cancelled
+    // / * Caller must have donated to the campaign
+    // / * Refund must not have been claimed already
+    fn claim_refund(ref self: TContractState, campaign_id: u256);
 
     // *************************************************************************
 //                        ANALYTICS & INSIGHTS

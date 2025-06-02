@@ -112,6 +112,7 @@ pub struct Campaigns {
     pub campaign_reference: felt252,
     pub withdrawn_amount: u256,
     pub donation_token: ContractAddress,
+    pub is_cancelled: bool,
 }
 
 #[derive(Drop, Serde, starknet::Store)]
