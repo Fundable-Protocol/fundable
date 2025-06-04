@@ -511,3 +511,272 @@ fn test_withdraw_funds_from_campaign_successful() {
     assert(owner_balance_after - owner_balance_before == 800, 'Withdrawal error')
 }
 
+#[test]
+fn test_get_donations_by_donor_no_donations() {
+    let (_token_address, sender, campaign_donation, _erc721) = setup();
+
+    // Fetch donations for sender
+    let donations = campaign_donation.get_donations_by_donor(sender);
+    assert(donations.len() == 0, 'Should have no donations');
+}
+
+#[test]
+fn test_get_donations_by_donor_single_donation() {
+    let (token_address, sender, campaign_donation, _erc721) = setup();
+    let target_amount = 1000_u256;
+
+    // Create new campaign
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let campaign_id: u256 = campaign_donation.create_campaign('Campaign1', target_amount);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Approve token transfer for campaign contract
+    let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
+    start_cheat_caller_address(token_address, sender);
+    token_dispatcher.approve(campaign_donation.contract_address, target_amount);
+    stop_cheat_caller_address(token_address);
+
+    // Make a single donation
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let amount_1 = 50_u256;
+    campaign_donation.donate_to_campaign(campaign_id, amount_1);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Fetch donations for sender
+    let donations = campaign_donation.get_donations_by_donor(sender);
+    assert(donations.len() == 1, 'Should have one donation');
+
+    // Verify donation details
+    let (stored_campaign_id, stored_donation) = donations.at(0);
+    assert(*stored_campaign_id == campaign_id, 'Campaign id mismatch');
+    assert(*stored_donation.donor == sender, 'Donor mismatch');
+    assert(*stored_donation.amount == amount_1, 'Amount mismatch');
+}
+
+#[test]
+fn test_get_donations_by_donor_across_multiple_campaigns() {
+    let (token_address, sender, campaign_donation, _erc721) = setup();
+    let target_amount = 1000_u256;
+
+    // Create two campaigns
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let campaign_id_1: u256 = campaign_donation.create_campaign('Campaign1', target_amount);
+    let campaign_id_2: u256 = campaign_donation.create_campaign('Campaign2', target_amount);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Approve token transfer for campaign contract
+    let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
+    start_cheat_caller_address(token_address, sender);
+    token_dispatcher.approve(campaign_donation.contract_address, target_amount);
+    stop_cheat_caller_address(token_address);
+
+    // Donate to campaign 1
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let amount_1 = 100_u256;
+    campaign_donation.donate_to_campaign(campaign_id_1, amount_1);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Donate to campaign 2
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let amount_2 = 200_u256;
+    campaign_donation.donate_to_campaign(campaign_id_2, amount_2);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Fetch all donations for sender
+    let donations = campaign_donation.get_donations_by_donor(sender);
+    assert(donations.len() == 2, 'Should have two donations');
+
+    // Verify first tuple
+    let (stored_campaign_id, stored_donation) = donations.at(0);
+    assert(*stored_campaign_id == campaign_id_1, 'Campaign id mismatch');
+    assert(*stored_donation.donor == sender, 'Donor mismatch');
+    assert(*stored_donation.amount == amount_1, 'Amount mismatch');
+
+    // Verify second tuple
+    let (stored_campaign_id, stored_donation) = donations.at(1);
+    assert(*stored_campaign_id == campaign_id_2, 'Campaign id mismatch');
+    assert(*stored_donation.donor == sender, 'Donor mismatch');
+    assert(*stored_donation.amount == amount_2, 'Amount mismatch');
+}
+
+#[test]
+fn test_get_donations_by_donor_multiple_donations() {
+    let (token_address, sender, campaign_donation, _erc721) = setup();
+    let target_amount = 1000_u256;
+
+    // Create new campaign
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let campaign_id: u256 = campaign_donation.create_campaign('Campaign1', target_amount);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Approve token transfer for campaign contract
+    let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
+    start_cheat_caller_address(token_address, sender);
+    token_dispatcher.approve(campaign_donation.contract_address, target_amount);
+    stop_cheat_caller_address(token_address);
+
+    // Make two donations
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let amount_1 = 50_u256;
+    campaign_donation.donate_to_campaign(campaign_id, amount_1);
+    let amount_2 = 10_u256;
+    campaign_donation.donate_to_campaign(campaign_id, amount_2);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Fetch donations for sender
+    let donations = campaign_donation.get_donations_by_donor(sender);
+    assert(donations.len() == 2, 'Should have two donations');
+
+    // Verify first donation
+    let (stored_campaign_id, stored_donation) = donations.at(0);
+    assert(*stored_campaign_id == campaign_id, 'Campaign id mismatch');
+    assert(*stored_donation.donor == sender, 'Donor mismatch');
+    assert(*stored_donation.amount == amount_1, 'Amount mismatch');
+
+    // Verify second donation
+    let (stored_campaign_id, stored_donation) = donations.at(1);
+    assert(*stored_campaign_id == campaign_id, 'Campaign id mismatch');
+    assert(*stored_donation.donor == sender, 'Donor mismatch');
+    assert(*stored_donation.amount == amount_2, 'Amount mismatch');
+}
+
+#[test]
+fn test_get_total_donated_by_donor_no_donations() {
+    let (_token_address, sender, campaign_donation, _erc721) = setup();
+
+    // Fetch total donated for sender
+    let total_donated = campaign_donation.get_total_donated_by_donor(sender);
+
+    // Verify donor has donated nothing
+    assert(total_donated == 0, 'Should have no donations');
+}
+
+#[test]
+fn test_get_total_donated_by_donor_single_donation() {
+    let (token_address, sender, campaign_donation, _erc721) = setup();
+
+    // Create new campaign
+    let target_amount = 1000_u256;
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let campaign_id: u256 = campaign_donation.create_campaign('Campaign1', target_amount);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Approve token transfer for campaign contract
+    let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
+    start_cheat_caller_address(token_address, sender);
+    token_dispatcher.approve(campaign_donation.contract_address, target_amount);
+    stop_cheat_caller_address(token_address);
+
+    // Make a single donation
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let amount_1 = 50_u256;
+    campaign_donation.donate_to_campaign(campaign_id, amount_1);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Fetch total donated for sender
+    let total_donated = campaign_donation.get_total_donated_by_donor(sender);
+
+    // Verify total donated equals the donation amount
+    assert(total_donated == amount_1, 'Total donated doesnt match');
+}
+
+#[test]
+fn test_get_total_donated_by_donor_multiple_donations_same_campaign() {
+    let (token_address, sender, campaign_donation, _erc721) = setup();
+
+    // Create new campaign
+    let target_amount = 1000_u256;
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let campaign_id: u256 = campaign_donation.create_campaign('Campaign1', target_amount);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Approve token transfer for campaign contract
+    let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
+    start_cheat_caller_address(token_address, sender);
+    token_dispatcher.approve(campaign_donation.contract_address, target_amount);
+    stop_cheat_caller_address(token_address);
+
+    // Make two donations to the same campaign
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let amount_1 = 50_u256;
+    campaign_donation.donate_to_campaign(campaign_id, amount_1);
+    let amount_2 = 10_u256;
+    campaign_donation.donate_to_campaign(campaign_id, amount_2);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Fetch total donated for sender
+    let total_donated = campaign_donation.get_total_donated_by_donor(sender);
+
+    // Verify total donated equals sum of both amounts
+    assert(total_donated == amount_1 + amount_2, 'Total donated doesnt match');
+}
+
+#[test]
+fn test_get_total_donated_by_donor_across_multiple_campaigns() {
+    let (token_address, sender, campaign_donation, _erc721) = setup();
+
+    // Create two campaigns
+    let target_amount = 1000_u256;
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let campaign_id_1: u256 = campaign_donation.create_campaign('Campaign1', target_amount);
+    let campaign_id_2: u256 = campaign_donation.create_campaign('Campaign2', target_amount);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Approve token transfer for campaign contract
+    let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
+    start_cheat_caller_address(token_address, sender);
+    token_dispatcher.approve(campaign_donation.contract_address, target_amount);
+    stop_cheat_caller_address(token_address);
+
+    // Make donations to both campaigns
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let amount_1 = 100_u256;
+    campaign_donation.donate_to_campaign(campaign_id_1, amount_1);
+    let amount_2 = 200_u256;
+    campaign_donation.donate_to_campaign(campaign_id_1, amount_2);
+    let amount_3 = 300_u256;
+    campaign_donation.donate_to_campaign(campaign_id_2, amount_3);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Fetch total donated for sender
+    let total_donated = campaign_donation.get_total_donated_by_donor(sender);
+
+    // Verify total donated equals sum of all amounts
+    assert(total_donated == amount_1 + amount_2 + amount_3, 'Total donated doesnt match');
+}
+
+#[test]
+fn test_has_donated_to_campaign_single_donation() {
+    let (token_address, sender, campaign_donation, _erc721) = setup();
+
+    // Check that sender has not donated to nonexistent campaign
+    let nonexistent_campaign_id = 42;
+    let has_donated = campaign_donation.has_donated_to_campaign(nonexistent_campaign_id, sender);
+    assert(!has_donated, 'No donation');
+
+    // Create new campaign
+    let target_amount = 1000_u256;
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let campaign_id: u256 = campaign_donation.create_campaign('Campaign1', target_amount);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Check that sender has not donated to newly created campaign
+    let has_donated = campaign_donation.has_donated_to_campaign(campaign_id, sender);
+    assert(!has_donated, 'No donation');
+
+    // Approve token transfer for campaign contract
+    let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
+    start_cheat_caller_address(token_address, sender);
+    token_dispatcher.approve(campaign_donation.contract_address, target_amount);
+    stop_cheat_caller_address(token_address);
+
+    // Make a single donation
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let amount_1 = 50_u256;
+    campaign_donation.donate_to_campaign(campaign_id, amount_1);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Check that sender has donated to campaign
+    let has_donated = campaign_donation.has_donated_to_campaign(campaign_id, sender);
+    assert(has_donated, 'Donation exists');
+}

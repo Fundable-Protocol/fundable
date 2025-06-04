@@ -104,67 +104,68 @@ pub trait ICampaignDonation<TContractState> {
     /// * `Array<Donations>` - An array of all donations made to the campaign
     fn get_campaign_donations(self: @TContractState, campaign_id: u256) -> Array<Donations>;
     // *************************************************************************
-//                        USER EXPERIENCE ENHANCEMENTS
-// *************************************************************************
+    //                        USER EXPERIENCE ENHANCEMENTS
+    // *************************************************************************
 
     /// Gets all active (non-closed) campaigns
-///
-/// # Returns
-/// * `Array<Campaigns>` - Array of campaigns that are still accepting donations
-// fn get_active_campaigns(self: @TContractState) -> Array<Campaigns>;
+    ///
+    /// # Returns
+    /// * `Array<Campaigns>` - Array of campaigns that are still accepting donations
+    // fn get_active_campaigns(self: @TContractState) -> Array<Campaigns>;
 
     /// Gets all campaigns created by a specific address
-///
-/// # Arguments
-/// * `owner` - The address of the campaign creator
-///
-/// # Returns
-/// * `Array<Campaigns>` - Array of campaigns created by the owner
-// fn get_campaigns_by_owner(self: @TContractState, owner: ContractAddress) -> Array<Campaigns>;
+    ///
+    /// # Arguments
+    /// * `owner` - The address of the campaign creator
+    ///
+    /// # Returns
+    /// * `Array<Campaigns>` - Array of campaigns created by the owner
+    // fn get_campaigns_by_owner(self: @TContractState, owner: ContractAddress) -> Array<Campaigns>;
 
     /// Gets a campaign by its unique reference identifier
-///
-/// # Arguments
-/// * `campaign_ref` - The unique 5-character campaign reference
-///
-/// # Returns
-/// * `Option<Campaigns>` - The campaign if found, None otherwise
-// fn get_campaign_by_ref(self: @TContractState, campaign_ref: felt252) -> Option<Campaigns>;
+    ///
+    /// # Arguments
+    /// * `campaign_ref` - The unique 5-character campaign reference
+    ///
+    /// # Returns
+    /// * `Option<Campaigns>` - The campaign if found, None otherwise
+    // fn get_campaign_by_ref(self: @TContractState, campaign_ref: felt252) -> Option<Campaigns>;
 
     // *************************************************************************
-//                           DONOR EXPERIENCE
-// *************************************************************************
+    //                           DONOR EXPERIENCE
+    // *************************************************************************
 
     /// Gets all donations made by a specific donor across all campaigns
-///
-/// # Arguments
-/// * `donor` - The address of the donor
-///
-/// # Returns
-/// * `Array<(u256, Donations)>` - Array of tuples (campaign_id, donation)
-// fn get_donations_by_donor(self: @TContractState, donor: ContractAddress) -> Array<(u256,
-// Donations)>;
+    ///
+    /// # Arguments
+    /// * `donor` - The address of the donor
+    ///
+    /// # Returns
+    /// * `Array<(u256, Donations)>` - Array of tuples (campaign_id, donation)
+    fn get_donations_by_donor(
+        self: @TContractState, donor: ContractAddress,
+    ) -> Array<(u256, Donations)>;
 
     /// Gets the total amount donated by a specific address
-///
-/// # Arguments
-/// * `donor` - The address of the donor
-///
-/// # Returns
-/// * `u256` - Total amount donated across all campaigns
-// fn get_total_donated_by_donor(self: @TContractState, donor: ContractAddress) -> u256;
+    ///
+    /// # Arguments
+    /// * `donor` - The address of the donor
+    ///
+    /// # Returns
+    /// * `u256` - Total amount donated across all campaigns
+    fn get_total_donated_by_donor(self: @TContractState, donor: ContractAddress) -> u256;
 
     /// Checks if a donor has contributed to a specific campaign
-///
-/// # Arguments
-/// * `campaign_id` - The campaign ID
-/// * `donor` - The donor address
-///
-/// # Returns
-/// * `bool` - True if the donor has contributed, false otherwise
-// fn has_donated_to_campaign(self: @TContractState, campaign_id: u256, donor: ContractAddress)
-// -> bool;
-
+    ///
+    /// # Arguments
+    /// * `campaign_id` - The campaign ID
+    /// * `donor` - The donor address
+    ///
+    /// # Returns
+    /// * `bool` - True if the donor has contributed, false otherwise
+    fn has_donated_to_campaign(
+        self: @TContractState, campaign_id: u256, donor: ContractAddress,
+    ) -> bool;
     // *************************************************************************
 //                        CAMPAIGN MANAGEMENT
 // *************************************************************************

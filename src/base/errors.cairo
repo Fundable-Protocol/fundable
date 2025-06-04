@@ -107,5 +107,8 @@ pub mod Errors {
     pub const ZERO_ALLOWANCE: felt252 = 'Error: Zero allowance found';
 
     pub const WITHDRAWAL_FAILED: felt252 = 'Error: Withdraw failed';
+
+    /// Thrown when an operation leads to an overflow
+    pub const OPERATION_OVERFLOW: felt252 = 'Error: Operation overflow';
 }
 
