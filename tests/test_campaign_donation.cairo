@@ -1,10 +1,11 @@
 use core::array::ArrayTrait;
 use core::traits::Into;
-use fundable::base::types::{Campaigns, Donations};
+use fundable::base::types::{Campaigns, DonationMetadata, Donations};
 use fundable::campaign_donation::CampaignDonation;
 use fundable::interfaces::ICampaignDonation::{
     ICampaignDonationDispatcher, ICampaignDonationDispatcherTrait,
 };
+use fundable::interfaces::IDonationNFT::{IDonationNFTDispatcher, IDonationNFTDispatcherTrait};
 use openzeppelin::access::accesscontrol::interface::{
     IAccessControlDispatcher, IAccessControlDispatcherTrait,
 };
@@ -38,6 +39,19 @@ fn setup() -> (ContractAddress, ContractAddress, ICampaignDonationDispatcher, IE
         ICampaignDonationDispatcher { contract_address: campaign_donation_address },
         IERC721Dispatcher { contract_address: campaign_donation_address },
     )
+}
+
+fn deploy_donation_nft(
+    campaign_donation_address: ContractAddress,
+) -> (IERC721Dispatcher, IDonationNFTDispatcher) {
+    let donation_nft_class = declare("DonationNFT").unwrap().contract_class();
+    let mut calldata = array![campaign_donation_address.into()];
+    let (donation_nft_address, _) = donation_nft_class.deploy(@calldata).unwrap();
+    let ierc721_dispatcher = IERC721Dispatcher { contract_address: donation_nft_address };
+    let idonation_nft_dispatcher = IDonationNFTDispatcher {
+        contract_address: donation_nft_address,
+    };
+    (ierc721_dispatcher, idonation_nft_dispatcher)
 }
 
 // DONE
@@ -512,6 +526,165 @@ fn test_withdraw_funds_from_campaign_successful() {
 }
 
 #[test]
+fn test_mint_donation_receipt_successful() {
+    let (_token_address, sender, campaign_donation, _erc721) = setup();
+    // Deploy the Donation NFT contract
+    let (erc721, donation_nft_dispatcher) = deploy_donation_nft(campaign_donation.contract_address);
+    // Use the protocol owner to set the donation NFT address
+    // in the campaign donation contract
+    let protocol_owner: ContractAddress = contract_address_const::<'protocol_owner'>();
+    // Set the donation NFT address in the campaign donation contract
+    start_cheat_caller_address(campaign_donation.contract_address, protocol_owner);
+    campaign_donation.set_donation_nft_address(donation_nft_dispatcher.contract_address);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+    let target_amount = 1000_u256;
+    let campaign_ref = 'Test';
+    let owner = contract_address_const::<'owner'>();
+
+    start_cheat_caller_address(campaign_donation.contract_address, owner);
+    let campaign_id = campaign_donation.create_campaign(campaign_ref, target_amount);
+
+    // Simulate delegate's approval:
+    start_cheat_caller_address(_token_address, sender);
+    IERC20Dispatcher { contract_address: _token_address }
+        .approve(campaign_donation.contract_address, 1000);
+    stop_cheat_caller_address(_token_address);
+
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let donation_id = campaign_donation.donate_to_campaign(campaign_id, 500);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Mint the receipt NFT
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+
+    let receipt_token_id = campaign_donation.mint_donation_nft(campaign_id, donation_id);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+    // Check if the NFT was minted successfull
+    assert(receipt_token_id > 0_u256, 'NFT minting failed');
+    // Verify the Donation Metadata
+    let donation_metadata = DonationMetadata {
+        campaign_id: campaign_id,
+        donation_id: donation_id,
+        donor: sender,
+        amount: 500_u256,
+        timestamp: starknet::get_block_timestamp(),
+        campaign_name: campaign_ref,
+        campaign_owner: owner,
+    };
+    let receipt_data = donation_nft_dispatcher.get_donation_data(receipt_token_id);
+    assert(
+        receipt_data.campaign_id == donation_metadata.campaign_id, 'Campaign ID mismatch in NFT',
+    );
+    assert(
+        receipt_data.donation_id == donation_metadata.donation_id, 'Donation ID mismatch in NFT',
+    );
+    assert(receipt_data.donor == donation_metadata.donor, 'Donor mismatch in NFT');
+    assert(receipt_data.amount == donation_metadata.amount, 'Amount mismatch in NFT');
+    assert(receipt_data.timestamp == donation_metadata.timestamp, 'Timestamp mismatch in NFT');
+    assert(
+        receipt_data.campaign_name == donation_metadata.campaign_name,
+        'Campaign name mismatch in NFT',
+    );
+    assert(
+        receipt_data.campaign_owner == donation_metadata.campaign_owner,
+        'Campaign owner mismatch in NFT',
+    );
+    // Verify the NFT ownership
+    let owner_of_nft = erc721.owner_of(receipt_token_id);
+    assert(owner_of_nft == sender, 'NFT ownership mismatch');
+}
+
+#[test]
+#[should_panic(expected: 'Caller is not the donor')]
+fn test_mint_donation_receipt_fail_if_not_donor() {
+    let (_token_address, sender, campaign_donation, _erc721) = setup();
+    // Deploy the Donation NFT contract
+    let (_erc721, donation_nft_dispatcher) = deploy_donation_nft(
+        campaign_donation.contract_address,
+    );
+    let protocol_owner: ContractAddress = contract_address_const::<'protocol_owner'>();
+    // Set the donation NFT address in the campaign donation contract
+    start_cheat_caller_address(campaign_donation.contract_address, protocol_owner);
+    campaign_donation.set_donation_nft_address(donation_nft_dispatcher.contract_address);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+    let target_amount = 1000_u256;
+    let campaign_ref = 'Test';
+    let owner = contract_address_const::<'owner'>();
+
+    start_cheat_caller_address(campaign_donation.contract_address, owner);
+    let campaign_id = campaign_donation.create_campaign(campaign_ref, target_amount);
+
+    // Simulate delegate's approval:
+    start_cheat_caller_address(_token_address, sender);
+    IERC20Dispatcher { contract_address: _token_address }
+        .approve(campaign_donation.contract_address, 1000);
+    stop_cheat_caller_address(_token_address);
+
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let donation_id = campaign_donation.donate_to_campaign(campaign_id, 500);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+    // Mint the receipt NFT
+    // Should panic because the owner contract is not the donor
+    start_cheat_caller_address(campaign_donation.contract_address, owner);
+    campaign_donation.mint_donation_nft(campaign_id, donation_id);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+}
+
+#[test]
+#[should_panic(expected: 'NFT already minted')]
+fn test_mint_donation_receipt_fail_if_already_minted() {
+    let (_token_address, sender, campaign_donation, _erc721) = setup();
+    // Deploy the Donation NFT contract
+    let (_erc721, donation_nft_dispatcher) = deploy_donation_nft(
+        campaign_donation.contract_address,
+    );
+    // Use the protocol owner to set the donation NFT address
+    // in the campaign donation contract
+    let protocol_owner: ContractAddress = contract_address_const::<'protocol_owner'>();
+    // Set the donation NFT address in the campaign donation contract
+    start_cheat_caller_address(campaign_donation.contract_address, protocol_owner);
+    campaign_donation.set_donation_nft_address(donation_nft_dispatcher.contract_address);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+    let target_amount = 1000_u256;
+    let campaign_ref = 'Test';
+    let owner = contract_address_const::<'owner'>();
+
+    start_cheat_caller_address(campaign_donation.contract_address, owner);
+    let campaign_id = campaign_donation.create_campaign(campaign_ref, target_amount);
+
+    // Simulate delegate's approval:
+    start_cheat_caller_address(_token_address, sender);
+    IERC20Dispatcher { contract_address: _token_address }
+        .approve(campaign_donation.contract_address, 1000);
+    stop_cheat_caller_address(_token_address);
+
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    let donation_id = campaign_donation.donate_to_campaign(campaign_id, 500);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Mint the receipt NFT for the first time
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+    campaign_donation.mint_donation_nft(campaign_id, donation_id);
+    stop_cheat_caller_address(campaign_donation.contract_address);
+
+    // Try to mint the receipt NFT again for the same donation
+    start_cheat_caller_address(campaign_donation.contract_address, sender);
+
+    campaign_donation.mint_donation_nft(campaign_id, donation_id);
+}
+
+#[test]
+#[should_panic(expected: 'Donation data not found')]
+fn test_get_donation_data_fail_if_not_found() {
+    let (_token_address, _sender, campaign_donation, _erc721) = setup();
+    // Deploy the Donation NFT contract
+    let (_erc721, donation_nft_dispatcher) = deploy_donation_nft(
+        campaign_donation.contract_address,
+    );
+
+    // Try to get donation data for a non-existent token ID
+    donation_nft_dispatcher.get_donation_data(999_u256);
+}
 fn test_get_donations_by_donor_no_donations() {
     let (_token_address, sender, campaign_donation, _erc721) = setup();
 

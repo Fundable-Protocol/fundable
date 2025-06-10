@@ -4,6 +4,7 @@ pub mod CampaignDonation {
     use core::num::traits::{OverflowingAdd, Zero};
     use core::traits::Into;
     use fundable::interfaces::ICampaignDonation::ICampaignDonation;
+    use fundable::interfaces::IDonationNFT::{IDonationNFTDispatcher, IDonationNFTDispatcherTrait};
     use openzeppelin::access::ownable::OwnableComponent;
     use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
     use openzeppelin::upgrades::UpgradeableComponent;
@@ -22,7 +23,7 @@ pub mod CampaignDonation {
         OPERATION_OVERFLOW, TARGET_NOT_REACHED, TARGET_REACHED, WITHDRAWAL_FAILED, ZERO_ALLOWANCE,
         ZERO_AMOUNT,
     };
-    use crate::base::types::{Campaigns, Donations};
+    use crate::base::types::{Campaigns, DonationMetadata, Donations};
 
     component!(path: UpgradeableComponent, storage: upgradeable, event: UpgradeableEvent);
     component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
@@ -48,6 +49,7 @@ pub mod CampaignDonation {
         campaign_closed: Map<u256, bool>, // Map campaign ids to closing boolean
         campaign_withdrawn: Map<u256, bool>, //Map campaign ids to whether they have been withdrawn
         donation_token: ContractAddress,
+        donation_nft_address: ContractAddress, // Address of the Donation NFT contract
         donor_donations: Map<
             ContractAddress, Vec<(u256, u256)>,
         > // Map donor_address to Vec of (campaign_id, donation_id)
@@ -302,6 +304,38 @@ pub mod CampaignDonation {
         fn get_campaign(self: @ContractState, campaign_id: u256) -> Campaigns {
             let campaign: Campaigns = self.campaigns.read(campaign_id);
             campaign
+        }
+        fn set_donation_nft_address(
+            ref self: ContractState, donation_nft_address: ContractAddress,
+        ) {
+            // Ensure the caller is the owner
+            self.ownable.assert_only_owner();
+            // Set the donation NFT address
+            self.donation_nft_address.write(donation_nft_address);
+        }
+        fn mint_donation_nft(
+            ref self: ContractState, campaign_id: u256, donation_id: u256,
+        ) -> u256 {
+            let nft_address = self.donation_nft_address.read();
+            assert(nft_address.is_non_zero(), 'NFT contract not configured');
+            let donation_nft_dispatcher = IDonationNFTDispatcher { contract_address: nft_address };
+            // Ensure caller is the donor
+            let caller = get_caller_address();
+            let donation = self.get_donation(campaign_id, donation_id);
+            assert(caller == donation.donor, 'Caller is not the donor');
+            let campaign = self.get_campaign(campaign_id);
+            let donation_data = DonationMetadata {
+                campaign_id,
+                campaign_name: campaign.campaign_reference,
+                campaign_owner: campaign.owner,
+                donation_id,
+                donor: donation.donor,
+                amount: donation.amount,
+                timestamp: get_block_timestamp(),
+            };
+            // Mint the NFT receipt
+            let token_id = donation_nft_dispatcher.mint_receipt(caller, donation_data);
+            token_id
         }
 
         fn get_donations_by_donor(
