@@ -102,7 +102,15 @@ pub mod Errors {
 
     pub const CAMPAIGN_NOT_CLOSED: felt252 = 'Error: Campaign not closed';
 
+    pub const CAMPAIGN_NOT_CANCELLED: felt252 = 'Error: Campaign not cancelled';
+
+    pub const CAMPAIGN_CLOSED: felt252 = 'Error: Campaign closed';
+
+    pub const CAMPAIGN_HAS_DONATIONS: felt252 = 'Error: Campaign has donations';
+
     pub const DOUBLE_WITHDRAWAL: felt252 = 'Error: Double Withdrawal';
+
+    pub const CAMPAIGN_WITHDRAWN: felt252 = 'Error: Campaign Withdrawn';
 
     pub const ZERO_ALLOWANCE: felt252 = 'Error: Zero allowance found';
 
@@ -110,5 +118,11 @@ pub mod Errors {
 
     /// Thrown when an operation leads to an overflow
     pub const OPERATION_OVERFLOW: felt252 = 'Error: Operation overflow';
+
+    pub const CAMPAIGN_NOT_FOUND: felt252 = 'Error: Campaign Not Found';
+
+    pub const REFUND_ALREADY_CLAIMED: felt252 = 'Error: Refund already claimed';
+
+    pub const DONATION_NOT_FOUND: felt252 = 'Error: Donation not found';
 }
 
