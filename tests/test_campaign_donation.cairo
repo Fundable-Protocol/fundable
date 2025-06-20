@@ -1049,7 +1049,7 @@ fn test_mint_donation_receipt_successful() {
 }
 
 #[test]
-#[should_panic(expected: 'Caller is not the donor')]
+#[should_panic(expected: 'Error: Caller is not the donor')]
 fn test_mint_donation_receipt_fail_if_not_donor() {
     let (_token_address, sender, campaign_donation, _erc721) = setup();
     // Deploy the Donation NFT contract

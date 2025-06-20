@@ -14,11 +14,12 @@ pub mod CampaignDonation {
     };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use crate::base::errors::Errors::{
-        CALLER_NOT_CAMPAIGN_OWNER, CAMPAIGN_CLOSED, CAMPAIGN_HAS_DONATIONS, CAMPAIGN_NOT_CANCELLED,
-        CAMPAIGN_NOT_CLOSED, CAMPAIGN_NOT_FOUND, CAMPAIGN_REF_EMPTY, CAMPAIGN_REF_EXISTS,
-        CAMPAIGN_WITHDRAWN, CANNOT_DENOTE_ZERO_AMOUNT, DONATION_NOT_FOUND, DOUBLE_WITHDRAWAL,
-        INSUFFICIENT_ALLOWANCE, MORE_THAN_TARGET, OPERATION_OVERFLOW, REFUND_ALREADY_CLAIMED,
-        TARGET_NOT_REACHED, TARGET_REACHED, WITHDRAWAL_FAILED, ZERO_ALLOWANCE, ZERO_AMOUNT,
+        CALLER_NOT_CAMPAIGN_OWNER, CALLER_NOT_DONOR, CAMPAIGN_CLOSED, CAMPAIGN_HAS_DONATIONS,
+        CAMPAIGN_NOT_CANCELLED, CAMPAIGN_NOT_CLOSED, CAMPAIGN_NOT_FOUND, CAMPAIGN_REF_EMPTY,
+        CAMPAIGN_REF_EXISTS, CAMPAIGN_WITHDRAWN, CANNOT_DENOTE_ZERO_AMOUNT, DONATION_NOT_FOUND,
+        DOUBLE_WITHDRAWAL, INSUFFICIENT_ALLOWANCE, INSUFFICIENT_BALANCE, MORE_THAN_TARGET,
+        NFT_NOT_CONFIGURED, OPERATION_OVERFLOW, REFUND_ALREADY_CLAIMED, TARGET_NOT_REACHED,
+        TARGET_REACHED, WITHDRAWAL_FAILED, ZERO_ALLOWANCE, ZERO_AMOUNT,
     };
     use crate::base::types::{Campaigns, DonationMetadata, Donations};
 
@@ -217,7 +218,7 @@ pub mod CampaignDonation {
             let contract_address = get_contract_address();
             let donation_token = self.donation_token.read();
             // cannot send more than target amount
-            assert!(amount <= campaign.target_amount, "Error: More than Target");
+            assert!(amount <= campaign.target_amount, "More than Target");
 
             let donation_id = self.donation_count.read() + 1;
 
@@ -226,6 +227,12 @@ pub mod CampaignDonation {
 
             // Prepare the ERC20 interface
             let token_dispatcher = IERC20Dispatcher { contract_address: donation_token };
+
+            let donor_balance = token_dispatcher.balance_of(donor);
+            assert(donor_balance >= amount, INSUFFICIENT_BALANCE);
+
+            let allowance = token_dispatcher.allowance(donor, contract_address);
+            assert(allowance >= amount, INSUFFICIENT_ALLOWANCE);
 
             // Transfer funds to contract — requires prior approval
             token_dispatcher.transfer_from(donor, contract_address, amount);
@@ -280,12 +287,13 @@ pub mod CampaignDonation {
 
             let withdrawn_amount = campaign.current_balance;
             let transfer_from = token.transfer(campaign_owner, withdrawn_amount);
+            assert(transfer_from, WITHDRAWAL_FAILED);
 
             campaign.withdrawn_amount = campaign.withdrawn_amount + withdrawn_amount;
             campaign.is_goal_reached = true;
             self.campaign_closed.write(campaign_id, true);
             self.campaigns.write(campaign_id, campaign);
-            assert(transfer_from, WITHDRAWAL_FAILED);
+
             let timestamp = get_block_timestamp();
             // emit CampaignWithdrawal event
             self
@@ -466,12 +474,12 @@ pub mod CampaignDonation {
             ref self: ContractState, campaign_id: u256, donation_id: u256,
         ) -> u256 {
             let nft_address = self.donation_nft_address.read();
-            assert(nft_address.is_non_zero(), 'NFT contract not configured');
+            assert(nft_address.is_non_zero(), NFT_NOT_CONFIGURED);
             let donation_nft_dispatcher = IDonationNFTDispatcher { contract_address: nft_address };
             // Ensure caller is the donor
             let caller = get_caller_address();
             let donation = self.get_donation(campaign_id, donation_id);
-            assert(caller == donation.donor, 'Caller is not the donor');
+            assert(caller == donation.donor, CALLER_NOT_DONOR);
             let campaign = self.get_campaign(campaign_id);
             let donation_data = DonationMetadata {
                 campaign_id,
