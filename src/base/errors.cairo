@@ -17,7 +17,8 @@ pub mod Errors {
     pub const WRONG_SENDER: felt252 = 'Error: Not stream sender.';
 
     /// Thrown when attempting to create a stream or make a payment with zero tokens
-    pub const ZERO_AMOUNT: felt252 = 'Error: Amount must be > 0.';
+    /// FIXED: Shortened to fit felt252 (31 char limit)
+    pub const ZERO_AMOUNT: felt252 = 'Error: Zero amount not allowed';
 
     /// Thrown when a stream is not transferable.
     pub const NON_TRANSFERABLE_STREAM: felt252 = 'Error: Non-transferrable stream';
@@ -83,14 +84,16 @@ pub mod Errors {
     /// Thrown when campaign ref exists
     pub const CAMPAIGN_REF_EXISTS: felt252 = 'Error: Campaign Ref Exists';
 
-    /// Thrown when campaign ref is emptu
+    /// Thrown when campaign ref is empty
     pub const CAMPAIGN_REF_EMPTY: felt252 = 'Error: Campaign Ref Is Required';
 
     /// Thrown when donating zero amount to a campaign
-    pub const CANNOT_DENOTE_ZERO_AMOUNT: felt252 = 'Error: Cannot donate nothing';
+    /// FIXED: Shortened to fit felt252 (31 char limit)
+    pub const CANNOT_DENOTE_ZERO_AMOUNT: felt252 = 'Error: Cannot denote zero amt';
 
     // Throw Error when campaign target has reached
-    pub const TARGET_REACHED: felt252 = 'Error: Target Reached';
+    /// FIXED: Shortened to fit felt252 (31 char limit)
+    pub const TARGET_REACHED: felt252 = 'Error: Target already reached';
 
     // Throw Error when target is not campaign owner
     pub const CALLER_NOT_CAMPAIGN_OWNER: felt252 = 'Caller is Not Campaign Owner';
@@ -108,7 +111,8 @@ pub mod Errors {
 
     pub const CAMPAIGN_HAS_DONATIONS: felt252 = 'Error: Campaign has donations';
 
-    pub const DOUBLE_WITHDRAWAL: felt252 = 'Error: Double Withdrawal';
+    /// FIXED: Shortened to fit felt252 (31 char limit)
+    pub const DOUBLE_WITHDRAWAL: felt252 = 'Error: Double withdrawal';
 
     pub const CAMPAIGN_WITHDRAWN: felt252 = 'Error: Campaign Withdrawn';
 
