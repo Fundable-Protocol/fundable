@@ -277,33 +277,34 @@ pub trait ICampaignDonation<TContractState> {
     // / * Refund must not have been claimed already
     fn claim_refund(ref self: TContractState, campaign_id: u256);
     // *************************************************************************
-    //                        ANALYTICS & INSIGHTS
-    // *************************************************************************
+//                        ANALYTICS & INSIGHTS
+// *************************************************************************
 
     /// Gets the progress percentage of a campaign
-    ///
-    /// # Arguments
-    /// * `campaign_id` - The campaign ID
-    ///
-    /// # Returns
-    /// * `u8` - Progress percentage (0-100)
-    // fn get_campaign_progress(self: @TContractState, campaign_id: u256) -> u8;
+///
+/// # Arguments
+/// * `campaign_id` - The campaign ID
+///
+/// # Returns
+/// * `u8` - Progress percentage (0-100)
+// fn get_campaign_progress(self: @TContractState, campaign_id: u256) -> u8;
 
     /// Gets the number of unique donors for a campaign
-    ///
-    /// # Arguments
-    /// * `campaign_id` - The campaign ID
-    ///
-    /// # Returns
-    /// * `u32` - Number of unique donors
-    // fn get_campaign_donor_count(self: @TContractState, campaign_id: u256) -> u32;
+///
+/// # Arguments
+/// * `campaign_id` - The campaign ID
+///
+/// # Returns
+/// * `u32` - Number of unique donors
+// fn get_campaign_donor_count(self: @TContractState, campaign_id: u256) -> u32;
 
     /// Gets campaigns close to reaching their goal
-    ///
-    /// # Arguments
-    /// * `threshold_percentage` - Minimum progress percentage (e.g., 80 for 80%+)
-    ///
-    /// # Returns
-    /// * `Array<Campaigns>` - Array of campaigns near completion
-    // fn get_campaigns_near_goal(self: @TContractState, threshold_percentage: u8) -> Array<Campaigns>;
+///
+/// # Arguments
+/// * `threshold_percentage` - Minimum progress percentage (e.g., 80 for 80%+)
+///
+/// # Returns
+/// * `Array<Campaigns>` - Array of campaigns near completion
+// fn get_campaigns_near_goal(self: @TContractState, threshold_percentage: u8) ->
+// Array<Campaigns>;
 }

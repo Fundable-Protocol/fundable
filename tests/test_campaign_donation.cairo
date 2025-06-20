@@ -165,7 +165,6 @@ fn test_successful_campaign_donation_twice() {
     let user_balance_before = token_dispatcher.balance_of(sender);
     let contract_balance_before = token_dispatcher.balance_of(campaign_donation.contract_address);
 
-    
     start_cheat_caller_address(token_address, sender);
     token_dispatcher.approve(campaign_donation.contract_address, 1000);
     stop_cheat_caller_address(token_address);

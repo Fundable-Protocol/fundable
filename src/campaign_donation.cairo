@@ -12,9 +12,7 @@ pub mod CampaignDonation {
         Map, MutableVecTrait, StorageMapReadAccess, StorageMapWriteAccess, StoragePathEntry,
         StoragePointerReadAccess, StoragePointerWriteAccess, Vec, VecTrait,
     };
-    use starknet::{
-        ContractAddress, get_block_timestamp, get_caller_address, get_contract_address,
-    };
+    use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use crate::base::errors::Errors::{
         CALLER_NOT_CAMPAIGN_OWNER, CAMPAIGN_CLOSED, CAMPAIGN_HAS_DONATIONS, CAMPAIGN_NOT_CANCELLED,
         CAMPAIGN_NOT_CLOSED, CAMPAIGN_NOT_FOUND, CAMPAIGN_REF_EMPTY, CAMPAIGN_REF_EXISTS,
@@ -129,13 +127,12 @@ pub mod CampaignDonation {
 
     #[derive(Drop, starknet::Event)]
     pub struct BatchDonationProcessed {
-    #[key]
-    pub donor: ContractAddress,
-    pub total_campaigns: u32,
-    pub successful_donations: u32,
-    pub total_amount: u256,
-    
-}
+        #[key]
+        pub donor: ContractAddress,
+        pub total_campaigns: u32,
+        pub successful_donations: u32,
+        pub total_amount: u256,
+    }
 
 
     #[derive(Drop, starknet::Event)]
@@ -291,7 +288,7 @@ pub mod CampaignDonation {
 
         /// Batch donations to multiple campaigns
         /// All-or-Nothing approach: if any donation fails, entire transaction reverts
-        /// 
+        ///
         /// Requirements:
         /// - campaign_amounts must not be empty and must not exceed MAX_BATCH_SIZE (20)
         /// - All campaign IDs must exist and be active
@@ -305,87 +302,82 @@ pub mod CampaignDonation {
         ///
         /// Note: Unlike single donations, batch donations automatically cap amounts
         /// that exceed the remaining needed to reach campaign targets
-        fn batch_donate(
-            ref self: ContractState,
-            campaign_amounts: Array<(u256, u256)>
-        ) {
+        fn batch_donate(ref self: ContractState, campaign_amounts: Array<(u256, u256)>) {
             const MAX_BATCH_SIZE: u32 = 20;
-            
+
             // Input validation
             assert(campaign_amounts.len() > 0, 'Empty campaign array');
             assert(campaign_amounts.len() <= MAX_BATCH_SIZE, 'Batch size too large');
-            
+
             let donor = get_caller_address();
             let contract_address = get_contract_address();
-            
+
             // STEP 1: Gas-optimized validation and total calculation - O(n) complexity
             let total_amount = self._validate_and_calculate_total_optimized(@campaign_amounts);
             assert(total_amount > 0, 'Total amount must be > 0');
-            
+
             // STEP 2: Token approval and balance checks
             let donation_token = self.donation_token.read();
             let token_dispatcher = IERC20Dispatcher { contract_address: donation_token };
-            
+
             let donor_balance = token_dispatcher.balance_of(donor);
             assert(donor_balance >= total_amount, 'Insufficient balance');
-            
+
             let allowance = token_dispatcher.allowance(donor, contract_address);
             assert(allowance >= total_amount, 'Insufficient allowance');
-            
+
             // STEP 3: Single transfer for all donations (optimization)
-            let transfer_success = token_dispatcher.transfer_from(
-                donor, 
-                contract_address, 
-                total_amount
-            );
+            let transfer_success = token_dispatcher
+                .transfer_from(donor, contract_address, total_amount);
             assert(transfer_success, 'Transfer failed');
-            
+
             // STEP 4: Process all donations with result tracking
             let mut results: Array<DonationResult> = ArrayTrait::new();
             let mut successful_donations: u32 = 0;
             let mut actual_total_amount: u256 = 0;
             let mut i = 0;
-            
+
             while i < campaign_amounts.len() {
                 let (campaign_id, requested_amount) = *campaign_amounts.at(i);
-                
+
                 // Process donation and get actual amount and donation ID
-                let (donation_id, actual_amount) = self._process_internal_donation_with_return(
-                    donor, 
-                    campaign_id, 
-                    requested_amount
-                );
-                
+                let (donation_id, actual_amount) = self
+                    ._process_internal_donation_with_return(donor, campaign_id, requested_amount);
+
                 // Track results (only add if donation actually happened)
                 if actual_amount > 0 {
-                    results.append(DonationResult {
-                        campaign_id,
-                        amount: actual_amount,
-                        success: true,
-                        donation_id
-                    });
+                    results
+                        .append(
+                            DonationResult {
+                                campaign_id, amount: actual_amount, success: true, donation_id,
+                            },
+                        );
                     successful_donations += 1;
                     actual_total_amount += actual_amount;
                 }
-                
+
                 i += 1;
-            };
-            
+            }
+
             // CRITICAL FIX: Refund any excess if actual total is less than transferred amount
             if actual_total_amount < total_amount {
                 let refund_amount = total_amount - actual_total_amount;
                 let refund_success = token_dispatcher.transfer(donor, refund_amount);
                 assert(refund_success, 'Refund failed');
             }
-            
+
             // Emit batch event (use actual amount, not pre-calculated amount)
-            self.emit(Event::BatchDonationProcessed(BatchDonationProcessed {
-                donor,
-                total_campaigns: campaign_amounts.len(),
-                successful_donations,
-                total_amount: actual_total_amount // Use actual amount, not pre-calculated
-                
-            }));
+            self
+                .emit(
+                    Event::BatchDonationProcessed(
+                        BatchDonationProcessed {
+                            donor,
+                            total_campaigns: campaign_amounts.len(),
+                            successful_donations,
+                            total_amount: actual_total_amount // Use actual amount, not pre-calculated
+                        },
+                    ),
+                );
         }
 
         fn get_donation(self: @ContractState, campaign_id: u256, donation_id: u256) -> Donations {
@@ -402,12 +394,10 @@ pub mod CampaignDonation {
                 i += 1;
             }
 
-            // Return empty donation if not found - FIXED: Using try_into instead of deprecated const
+            // Return empty donation if not found - FIXED: Using try_into instead of deprecated
+            // const
             Donations {
-                donation_id: 0, 
-                donor: 0_felt252.try_into().unwrap(), 
-                campaign_id: 0, 
-                amount: 0,
+                donation_id: 0, donor: 0_felt252.try_into().unwrap(), campaign_id: 0, amount: 0,
             }
         }
 
@@ -608,18 +598,17 @@ pub mod CampaignDonation {
 
     #[derive(Drop, Copy)]
     struct CampaignBatchTotal {
-    campaign_id: u256,
-    total_amount: u256,
-}
+        campaign_id: u256,
+        total_amount: u256,
+    }
 
-#[derive(Drop, Copy)]
-struct DonationResult {
-    campaign_id: u256,
-    amount: u256,
-    success: bool,
-    donation_id: u256,
-}
-
+    #[derive(Drop, Copy)]
+    struct DonationResult {
+        campaign_id: u256,
+        amount: u256,
+        success: bool,
+        donation_id: u256,
+    }
 
 
     #[generate_trait]
@@ -629,53 +618,60 @@ struct DonationResult {
             let mut token_address: ContractAddress = 0_felt252.try_into().unwrap();
             if token_name == 'USDC' || token_name == 'usdc' {
                 token_address =
-                    0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8_felt252.try_into().unwrap();
+                    0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8_felt252
+                    .try_into()
+                    .unwrap();
             }
             if token_name == 'STRK' || token_name == 'strk' {
                 token_address =
-                    0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d_felt252.try_into().unwrap();
+                    0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d_felt252
+                    .try_into()
+                    .unwrap();
             }
             if token_name == 'ETH' || token_name == 'eth' {
                 token_address =
-                    0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7_felt252.try_into().unwrap();
+                    0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7_felt252
+                    .try_into()
+                    .unwrap();
             }
             if token_name == 'USDT' || token_name == 'usdt' {
                 token_address =
-                    0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8_felt252.try_into().unwrap();
+                    0x068f5c6a61780768455de69077e07e89787839bf8166decfbf92b645209c0fb8_felt252
+                    .try_into()
+                    .unwrap();
             }
 
             token_address
         }
 
         fn _validate_and_calculate_total(
-            self: @ContractState, 
-            campaign_amounts: @Array<(u256, u256)>
+            self: @ContractState, campaign_amounts: @Array<(u256, u256)>,
         ) -> u256 {
             let mut total: u256 = 0;
             let mut i = 0;
-            
+
             while i < campaign_amounts.len() {
                 let (campaign_id, amount) = *campaign_amounts.at(i);
-                
+
                 // Validate donation amount > 0
                 assert(amount > 0, 'Amount must be > 0');
-                
+
                 // Validate campaign exists
                 let campaign = self.campaigns.read(campaign_id);
                 assert(!campaign.owner.is_zero(), 'Campaign does not exist');
-                
+
                 // Check campaign is active (not closed/goal reached)
                 assert(!campaign.is_closed, 'Campaign is closed');
                 assert(!campaign.is_goal_reached, 'Campaign goal reached');
-                
+
                 // Check for integer overflow in total calculation
                 let new_total = total + amount;
                 assert(new_total >= total, 'Amount overflow');
                 total = new_total;
-                
+
                 i += 1;
-            };
-            
+            }
+
             total
         }
 
@@ -683,19 +679,18 @@ struct DonationResult {
         /// Pre-calculates campaign totals to avoid nested loops (was O(n²), now O(n))
         /// FIXED: Removed dictionary approach to avoid Copy trait issues
         fn _validate_and_calculate_total_optimized(
-            self: @ContractState, 
-            campaign_amounts: @Array<(u256, u256)>
+            self: @ContractState, campaign_amounts: @Array<(u256, u256)>,
         ) -> u256 {
             // STEP 1: Pre-calculate campaign batch totals in single pass O(n)
             let mut campaign_totals: Array<CampaignBatchTotal> = ArrayTrait::new();
             let mut i = 0;
-            
+
             while i < campaign_amounts.len() {
                 let (campaign_id, amount) = *campaign_amounts.at(i);
-                
+
                 // Validate donation amount > 0
                 assert(amount > 0, 'Amount must be > 0');
-                
+
                 // Find existing total for this campaign or create new entry
                 let mut found = false;
                 let mut found_index = 0;
@@ -708,8 +703,8 @@ struct DonationResult {
                         break;
                     }
                     j += 1;
-                };
-                
+                }
+
                 if found {
                     // Update existing total (simplified approach - rebuild array)
                     let mut new_totals: Array<CampaignBatchTotal> = ArrayTrait::new();
@@ -717,39 +712,40 @@ struct DonationResult {
                     while k < campaign_totals.len() {
                         let existing = *campaign_totals.at(k);
                         if k == found_index {
-                            new_totals.append(CampaignBatchTotal {
-                                campaign_id: existing.campaign_id,
-                                total_amount: existing.total_amount + amount,
-                            });
+                            new_totals
+                                .append(
+                                    CampaignBatchTotal {
+                                        campaign_id: existing.campaign_id,
+                                        total_amount: existing.total_amount + amount,
+                                    },
+                                );
                         } else {
                             new_totals.append(existing);
                         }
                         k += 1;
-                    };
+                    }
                     campaign_totals = new_totals;
                 } else {
-                    campaign_totals.append(CampaignBatchTotal {
-                        campaign_id,
-                        total_amount: amount,
-                    });
+                    campaign_totals
+                        .append(CampaignBatchTotal { campaign_id, total_amount: amount });
                 }
-                
+
                 i += 1;
-            };
-            
+            }
+
             // STEP 2: Validate campaigns and calculate effective total O(unique_campaigns)
             let mut total: u256 = 0;
             let mut k = 0;
-            
+
             while k < campaign_totals.len() {
                 let campaign_total = *campaign_totals.at(k); // FIXED: Now works with Copy trait
-                
+
                 // Validate campaign exists and is active
                 let campaign = self.campaigns.read(campaign_total.campaign_id);
                 assert(!campaign.owner.is_zero(), 'Campaign does not exist');
                 assert(!campaign.is_closed, 'Campaign is closed');
                 assert(!campaign.is_goal_reached, 'Campaign goal reached');
-                
+
                 // Calculate effective amount with auto-capping
                 let remaining = campaign.target_amount - campaign.current_balance;
                 let effective_amount = if campaign_total.total_amount > remaining {
@@ -757,78 +753,82 @@ struct DonationResult {
                 } else {
                     campaign_total.total_amount // Use full amount
                 };
-                
+
                 total += effective_amount;
-                
+
                 // Check for overflow
                 assert(total >= effective_amount, 'Total overflow');
-                
+
                 k += 1;
-            };
-            
+            }
+
             total
         }
 
         fn _process_internal_donation(
-            ref self: ContractState,
-            donor: ContractAddress,
-            campaign_id: u256,
-            amount: u256
+            ref self: ContractState, donor: ContractAddress, campaign_id: u256, amount: u256,
         ) {
             // Use the new function for backward compatibility
-            let (_donation_id, _actual_amount) = self._process_internal_donation_with_return(donor, campaign_id, amount);
+            let (_donation_id, _actual_amount) = self
+                ._process_internal_donation_with_return(donor, campaign_id, amount);
         }
 
         /// Process internal donation with return values for batch tracking
-        /// If amount exceeds the remaining needed to hit campaign.target_amount, 
+        /// If amount exceeds the remaining needed to hit campaign.target_amount,
         /// it is automatically reduced to that remaining amount.
         fn _process_internal_donation_with_return(
-            ref self: ContractState,
-            donor: ContractAddress,
-            campaign_id: u256,
-            amount: u256
+            ref self: ContractState, donor: ContractAddress, campaign_id: u256, amount: u256,
         ) -> (u256, u256) {
             let mut campaign = self.campaigns.read(campaign_id);
             let timestamp = get_block_timestamp();
-            
+
             // Calculate actual donation amount (don't exceed target) - AUTO-CAPPING
             let remaining_amount = campaign.target_amount - campaign.current_balance;
-            let actual_amount = if amount > remaining_amount { remaining_amount } else { amount };
-            
+            let actual_amount = if amount > remaining_amount {
+                remaining_amount
+            } else {
+                amount
+            };
+
             // Skip if no amount to donate (campaign already fully funded)
             if actual_amount == 0 {
                 return (0, 0);
             }
-            
+
             // Get next donation ID
             let donation_id = self.donation_count.read() + 1;
-            
+
             // Update campaign amount
             campaign.current_balance = campaign.current_balance + actual_amount;
-            
+
             // If goal reached, mark as closed
             if campaign.current_balance >= campaign.target_amount {
                 campaign.is_goal_reached = true;
                 campaign.is_closed = true;
             }
-            
+
             self.campaigns.write(campaign_id, campaign);
-            
+
             // Create donation record
             let donation = Donations { donation_id, donor, campaign_id, amount: actual_amount };
-            
+
             // Properly append to the Vec using push
             self.donations.entry(campaign_id).push(donation);
-            
+
             self.donation_count.write(donation_id);
-            
+
             // Update the per-campaign donation count
             let campaign_donation_count = self.donation_counts.read(campaign_id);
             self.donation_counts.write(campaign_id, campaign_donation_count + 1);
-            
+
             // Emit donation event for each successful donation
-            self.emit(Event::Donation(Donation { donor, campaign_id, amount: actual_amount, timestamp }));
-            
+            self
+                .emit(
+                    Event::Donation(
+                        Donation { donor, campaign_id, amount: actual_amount, timestamp },
+                    ),
+                );
+
             // Return both donation_id and actual_amount for tracking
             (donation_id, actual_amount)
         }
