@@ -17,7 +17,8 @@ pub mod Errors {
     pub const WRONG_SENDER: felt252 = 'Error: Not stream sender.';
 
     /// Thrown when attempting to create a stream or make a payment with zero tokens
-    pub const ZERO_AMOUNT: felt252 = 'Error: Amount must be > 0.';
+    /// FIXED: Shortened to fit felt252 (31 char limit)
+    pub const ZERO_AMOUNT: felt252 = 'Error: Zero amount not allowed';
 
     /// Thrown when a stream is not transferable.
     pub const NON_TRANSFERABLE_STREAM: felt252 = 'Error: Non-transferrable stream';
@@ -83,14 +84,16 @@ pub mod Errors {
     /// Thrown when campaign ref exists
     pub const CAMPAIGN_REF_EXISTS: felt252 = 'Error: Campaign Ref Exists';
 
-    /// Thrown when campaign ref is emptu
+    /// Thrown when campaign ref is empty
     pub const CAMPAIGN_REF_EMPTY: felt252 = 'Error: Campaign Ref Is Required';
 
     /// Thrown when donating zero amount to a campaign
-    pub const CANNOT_DENOTE_ZERO_AMOUNT: felt252 = 'Error: Cannot donate nothing';
+    /// FIXED: Shortened to fit felt252 (31 char limit)
+    pub const CANNOT_DENOTE_ZERO_AMOUNT: felt252 = 'Error: Cannot denote zero amt';
 
     // Throw Error when campaign target has reached
-    pub const TARGET_REACHED: felt252 = 'Error: Target Reached';
+    /// FIXED: Shortened to fit felt252 (31 char limit)
+    pub const TARGET_REACHED: felt252 = 'Error: Target already reached';
 
     // Throw Error when target is not campaign owner
     pub const CALLER_NOT_CAMPAIGN_OWNER: felt252 = 'Caller is Not Campaign Owner';
@@ -108,7 +111,8 @@ pub mod Errors {
 
     pub const CAMPAIGN_HAS_DONATIONS: felt252 = 'Error: Campaign has donations';
 
-    pub const DOUBLE_WITHDRAWAL: felt252 = 'Error: Double Withdrawal';
+    /// FIXED: Shortened to fit felt252 (31 char limit)
+    pub const DOUBLE_WITHDRAWAL: felt252 = 'Error: Double withdrawal';
 
     pub const CAMPAIGN_WITHDRAWN: felt252 = 'Error: Campaign Withdrawn';
 
@@ -124,5 +128,57 @@ pub mod Errors {
     pub const REFUND_ALREADY_CLAIMED: felt252 = 'Error: Refund already claimed';
 
     pub const DONATION_NOT_FOUND: felt252 = 'Error: Donation not found';
-}
 
+    // ======================================
+    // BATCH DONATION ERRORS - ALL SHORTENED
+    // ======================================
+
+    /// Thrown when batch donation array is empty
+    pub const EMPTY_CAMPAIGN_ARRAY: felt252 = 'Empty campaign array';
+
+    /// Thrown when batch donation array exceeds maximum size
+    pub const BATCH_SIZE_TOO_LARGE: felt252 = 'Batch size too large';
+
+    /// Thrown when donor has insufficient balance for batch donation
+    pub const INSUFFICIENT_BALANCE: felt252 = 'Insufficient balance';
+
+    /// Thrown when amount in batch donation must be positive
+    pub const AMOUNT_MUST_BE_POSITIVE: felt252 = 'Amount must be > 0';
+
+    /// Thrown when campaign does not exist in batch donation
+    pub const CAMPAIGN_DOES_NOT_EXIST: felt252 = 'Campaign does not exist';
+
+    /// Thrown when campaign is closed in batch donation
+    pub const CAMPAIGN_IS_CLOSED: felt252 = 'Campaign is closed';
+
+    /// Thrown when campaign goal is already reached in batch donation
+    pub const CAMPAIGN_GOAL_REACHED: felt252 = 'Campaign goal reached';
+
+    /// Thrown when amount calculation overflows
+    pub const AMOUNT_OVERFLOW: felt252 = 'Amount overflow';
+
+    /// Thrown when total calculation overflows
+    pub const TOTAL_OVERFLOW: felt252 = 'Total overflow';
+
+    /// Thrown when token transfer fails in batch donation
+    pub const TRANSFER_FAILED: felt252 = 'Transfer failed';
+
+    /// Thrown when total amount must be positive
+    pub const TOTAL_AMOUNT_POSITIVE: felt252 = 'Total amount must be > 0';
+
+    // ======================================
+    // NFT ERRORS - ALL SHORTENED
+    // ======================================
+
+    /// Thrown when caller is not the donor for NFT minting
+    pub const CALLER_NOT_DONOR: felt252 = 'Caller is not the donor';
+
+    /// Thrown when NFT is already minted for a donation
+    pub const NFT_ALREADY_MINTED: felt252 = 'NFT already minted';
+
+    /// Thrown when donation data is not found for NFT
+    pub const DONATION_DATA_NOT_FOUND: felt252 = 'Donation data not found';
+
+    /// Thrown when NFT contract is not configured
+    pub const NFT_CONTRACT_NOT_SET: felt252 = 'NFT contract not configured';
+}

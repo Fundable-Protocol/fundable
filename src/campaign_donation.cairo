@@ -63,6 +63,7 @@ pub mod CampaignDonation {
         BatchDonationProcessed: BatchDonationProcessed,
         CampaignWithdrawal: CampaignWithdrawal,
         CampaignUpdated: CampaignUpdated,
+        DonationResultEvent: DonationResultEvent,
         CampaignCancelled: CampaignCancelled,
         CampaignRefunded: CampaignRefunded,
         #[flat]
@@ -116,6 +117,17 @@ pub mod CampaignDonation {
         #[key]
         pub new_target: u256,
     }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct DonationResultEvent {
+        #[key]
+        pub donor: ContractAddress,
+        pub campaign_id: u256,
+        pub amount: u256,
+        pub success: bool,
+        pub donation_id: u256,
+    }
+
 
     #[derive(Drop, starknet::Event)]
     pub struct CampaignCancelled {
@@ -352,32 +364,37 @@ pub mod CampaignDonation {
                                 campaign_id, amount: actual_amount, success: true, donation_id,
                             },
                         );
+
                     successful_donations += 1;
                     actual_total_amount += actual_amount;
-                }
 
+                    // Emit individual result event per donation
+                    self
+                        .emit(
+                            Event::DonationResultEvent(
+                                DonationResultEvent {
+                                    donor,
+                                    campaign_id,
+                                    amount: actual_amount,
+                                    success: true,
+                                    donation_id,
+                                },
+                            ),
+                        );
+                    self
+                        .emit(
+                            Event::BatchDonationProcessed(
+                                BatchDonationProcessed {
+                                    donor,
+                                    total_campaigns: campaign_amounts.len(),
+                                    successful_donations,
+                                    total_amount: actual_total_amount,
+                                },
+                            ),
+                        );
+                }
                 i += 1;
             }
-
-            // CRITICAL FIX: Refund any excess if actual total is less than transferred amount
-            if actual_total_amount < total_amount {
-                let refund_amount = total_amount - actual_total_amount;
-                let refund_success = token_dispatcher.transfer(donor, refund_amount);
-                assert(refund_success, 'Refund failed');
-            }
-
-            // Emit batch event (use actual amount, not pre-calculated amount)
-            self
-                .emit(
-                    Event::BatchDonationProcessed(
-                        BatchDonationProcessed {
-                            donor,
-                            total_campaigns: campaign_amounts.len(),
-                            successful_donations,
-                            total_amount: actual_total_amount // Use actual amount, not pre-calculated
-                        },
-                    ),
-                );
         }
 
         fn get_donation(self: @ContractState, campaign_id: u256, donation_id: u256) -> Donations {
