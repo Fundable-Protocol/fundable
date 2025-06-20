@@ -62,6 +62,7 @@ pub mod CampaignDonation {
     enum Event {
         Campaign: Campaign,
         Donation: Donation,
+        BatchDonationProcessed: BatchDonationProcessed,
         CampaignWithdrawal: CampaignWithdrawal,
         CampaignUpdated: CampaignUpdated,
         CampaignCancelled: CampaignCancelled,
@@ -125,6 +126,17 @@ pub mod CampaignDonation {
         #[key]
         pub timestamp: u64,
     }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct BatchDonationProcessed {
+    #[key]
+    pub donor: ContractAddress,
+    pub total_campaigns: u32,
+    pub successful_donations: u32,
+    pub total_amount: u256,
+    
+}
+
 
     #[derive(Drop, starknet::Event)]
     pub struct CampaignRefunded {
@@ -371,8 +383,8 @@ pub mod CampaignDonation {
                 donor,
                 total_campaigns: campaign_amounts.len(),
                 successful_donations,
-                total_amount: actual_total_amount,  // Use actual amount, not pre-calculated
-                results
+                total_amount: actual_total_amount // Use actual amount, not pre-calculated
+                
             }));
         }
 
@@ -593,6 +605,22 @@ pub mod CampaignDonation {
                 );
         }
     }
+
+    #[derive(Drop, Copy)]
+    struct CampaignBatchTotal {
+    campaign_id: u256,
+    total_amount: u256,
+}
+
+#[derive(Drop, Copy)]
+struct DonationResult {
+    campaign_id: u256,
+    amount: u256,
+    success: bool,
+    donation_id: u256,
+}
+
+
 
     #[generate_trait]
     impl InternalImpl of InternalTrait {
