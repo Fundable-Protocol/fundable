@@ -156,30 +156,11 @@ pub mod CampaignDonation {
         fn create_campaign(
             ref self: ContractState, campaign_ref: felt252, target_amount: u256,
         ) -> u256 {
-            assert(campaign_ref != '', CAMPAIGN_REF_EMPTY);
-            assert(!self.campaign_refs.read(campaign_ref), CAMPAIGN_REF_EXISTS);
-            assert(target_amount > 0, ZERO_AMOUNT);
-            let campaign_id: u256 = self.campaign_counts.read() + 1;
             let caller = get_caller_address();
             let timestamp = get_block_timestamp();
-            let current_balance: u256 = 0;
-            let withdrawn_amount: u256 = 0;
-            let campaign = Campaigns {
-                campaign_id,
-                owner: caller,
-                target_amount,
-                current_balance,
-                withdrawn_amount,
-                campaign_reference: campaign_ref,
-                is_closed: false,
-                is_goal_reached: false,
-                donation_token: self.donation_token.read(),
-                is_cancelled: false,
-            };
-
-            self.campaigns.write(campaign_id, campaign);
-            self.campaign_counts.write(campaign_id);
-            self.campaign_refs.write(campaign_ref, true);
+            let ref_campaign = campaign_ref.clone();
+            let campaign_target_amount = target_amount.clone();
+            let campaign_id = self._create_campaign(ref_campaign, campaign_target_amount);
             self
                 .emit(
                     Event::Campaign(
@@ -197,64 +178,18 @@ pub mod CampaignDonation {
         }
 
         fn donate_to_campaign(ref self: ContractState, campaign_id: u256, amount: u256) -> u256 {
-            assert(amount > 0, CANNOT_DENOTE_ZERO_AMOUNT);
+            let _campaign_id = campaign_id.clone();
+            let _amount = amount.clone();
             let donor = get_caller_address();
-            let mut campaign = self.get_campaign(campaign_id);
-            let contract_address = get_contract_address();
             let timestamp = get_block_timestamp();
-            let donation_token = self.donation_token.read();
-            // cannot send more than target amount
-            assert!(amount <= campaign.target_amount, "More than Target");
-
-            let donation_id = self.donation_count.read() + 1;
-
-            // Ensure the campaign is still accepting donations
-            assert(!campaign.is_goal_reached, TARGET_REACHED);
-
-            // Prepare the ERC20 interface
-            let token_dispatcher = IERC20Dispatcher { contract_address: donation_token };
-
-            let donor_balance = token_dispatcher.balance_of(donor);
-            assert(donor_balance >= amount, INSUFFICIENT_BALANCE);
-
-            let allowance = token_dispatcher.allowance(donor, contract_address);
-            assert(allowance >= amount, INSUFFICIENT_ALLOWANCE);
-
-            // Transfer funds to contract — requires prior approval
-            token_dispatcher.transfer_from(donor, contract_address, amount);
-
-            // Update campaign amount
-            campaign.current_balance = campaign.current_balance + amount;
-
-            // Update donor's total donation for this campaign
-            let current_total = self.donations_by_donor.read((campaign_id, donor));
-            self.donations_by_donor.write((campaign_id, donor), current_total + amount);
-
-            // If goal reached, mark as closed
-            if (campaign.current_balance >= campaign.target_amount) {
-                campaign.is_goal_reached = true;
-                campaign.is_closed = true;
-            }
-
-            self.campaigns.write(campaign_id, campaign);
-
-            // Create donation record
-            let donation = Donations { donation_id, donor, campaign_id, amount };
-
-            // Properly append to the Vec using push
-            self.donations.entry(campaign_id).push(donation);
-
-            self.donation_count.write(donation_id);
-
-            // Save donation reference for the donor
-            self.donor_donations.entry(donor).push((campaign_id, donation_id));
-
-            // Update the per-campaign donation count
-            let campaign_donation_count = self.donation_counts.read(campaign_id);
-            self.donation_counts.write(campaign_id, campaign_donation_count + 1);
-            let timestamp = get_block_timestamp();
+            let donation_id = self._donate_to_campaign(_campaign_id, _amount);
             // Emit donation event
-            self.emit(Event::Donation(Donation { donor, campaign_id, amount, timestamp }));
+            self
+                .emit(
+                    Event::Donation(
+                        Donation { donor, campaign_id: _campaign_id, amount: _amount, timestamp },
+                    ),
+                );
 
             donation_id
         }
@@ -262,37 +197,20 @@ pub mod CampaignDonation {
 
         fn withdraw_from_campaign(ref self: ContractState, campaign_id: u256) {
             let caller = get_caller_address();
-            let mut campaign = self.campaigns.read(campaign_id);
-            let campaign_owner = campaign.owner;
-            assert(caller == campaign_owner, CALLER_NOT_CAMPAIGN_OWNER);
-            campaign.is_goal_reached = true;
+            let _campaign_id = campaign_id.clone();
 
-            let this_contract = get_contract_address();
-
-            assert(campaign.is_closed, CAMPAIGN_NOT_CLOSED);
-
-            assert(!self.campaign_withdrawn.read(campaign_id), DOUBLE_WITHDRAWAL);
-
-            let donation_token = self.donation_token.read();
-
-            let token = IERC20Dispatcher { contract_address: donation_token };
-
-            let withdrawn_amount = campaign.current_balance;
-            let transfer_from = token.transfer(campaign_owner, withdrawn_amount);
-            assert(transfer_from, WITHDRAWAL_FAILED);
-
-            campaign.withdrawn_amount = campaign.withdrawn_amount + withdrawn_amount;
-            campaign.is_goal_reached = true;
-            self.campaign_closed.write(campaign_id, true);
-            self.campaigns.write(campaign_id, campaign);
-
+            let withdrawn_amount = self._withdraw_from_campaign(_campaign_id);
             let timestamp = get_block_timestamp();
+
             // emit CampaignWithdrawal event
             self
                 .emit(
                     Event::CampaignWithdrawal(
                         CampaignWithdrawal {
-                            owner: caller, campaign_id, amount: withdrawn_amount, timestamp,
+                            owner: caller,
+                            campaign_id: _campaign_id,
+                            amount: withdrawn_amount,
+                            timestamp,
                         },
                     ),
                 );
@@ -515,6 +433,122 @@ pub mod CampaignDonation {
 
     #[generate_trait]
     impl InternalImpl of InternalTrait {
+        fn _create_campaign(
+            ref self: ContractState, campaign_ref: felt252, target_amount: u256,
+        ) -> u256 {
+            assert(campaign_ref != '', CAMPAIGN_REF_EMPTY);
+            assert(!self.campaign_refs.read(campaign_ref), CAMPAIGN_REF_EXISTS);
+            assert(target_amount > 0, ZERO_AMOUNT);
+            let campaign_id: u256 = self.campaign_counts.read() + 1;
+            let caller = get_caller_address();
+            let current_balance: u256 = 0;
+            let withdrawn_amount: u256 = 0;
+            let campaign = Campaigns {
+                campaign_id,
+                owner: caller,
+                target_amount,
+                current_balance,
+                withdrawn_amount,
+                campaign_reference: campaign_ref,
+                is_closed: false,
+                is_goal_reached: false,
+                donation_token: self.donation_token.read(),
+                is_cancelled: false,
+            };
+
+            self.campaigns.write(campaign_id, campaign);
+            self.campaign_counts.write(campaign_id);
+            self.campaign_refs.write(campaign_ref, true);
+            campaign_id
+        }
+
+        fn _donate_to_campaign(ref self: ContractState, campaign_id: u256, amount: u256) -> u256 {
+            assert(amount > 0, CANNOT_DENOTE_ZERO_AMOUNT);
+            let donor = get_caller_address();
+            let mut campaign = self.get_campaign(campaign_id);
+            let contract_address = get_contract_address();
+
+            let donation_token = self.donation_token.read();
+            // cannot send more than target amount
+            assert!(amount <= campaign.target_amount, "More than Target");
+
+            let donation_id = self.donation_count.read() + 1;
+
+            // Ensure the campaign is still accepting donations
+            assert(!campaign.is_goal_reached, TARGET_REACHED);
+
+            // Prepare the ERC20 interface
+            let token_dispatcher = IERC20Dispatcher { contract_address: donation_token };
+
+            let donor_balance = token_dispatcher.balance_of(donor);
+            assert(donor_balance >= amount, INSUFFICIENT_BALANCE);
+
+            let allowance = token_dispatcher.allowance(donor, contract_address);
+            assert(allowance >= amount, INSUFFICIENT_ALLOWANCE);
+
+            // Transfer funds to contract — requires prior approval
+            token_dispatcher.transfer_from(donor, contract_address, amount);
+
+            // Update campaign amount
+            campaign.current_balance = campaign.current_balance + amount;
+
+            // Update donor's total donation for this campaign
+            let current_total = self.donations_by_donor.read((campaign_id, donor));
+            self.donations_by_donor.write((campaign_id, donor), current_total + amount);
+
+            // If goal reached, mark as closed
+            if (campaign.current_balance >= campaign.target_amount) {
+                campaign.is_goal_reached = true;
+                campaign.is_closed = true;
+            }
+
+            self.campaigns.write(campaign_id, campaign);
+
+            // Create donation record
+            let donation = Donations { donation_id, donor, campaign_id, amount };
+
+            // Properly append to the Vec using push
+            self.donations.entry(campaign_id).push(donation);
+
+            self.donation_count.write(donation_id);
+
+            // Save donation reference for the donor
+            self.donor_donations.entry(donor).push((campaign_id, donation_id));
+
+            // Update the per-campaign donation count
+            let campaign_donation_count = self.donation_counts.read(campaign_id);
+            self.donation_counts.write(campaign_id, campaign_donation_count + 1);
+            donation_id
+        }
+
+        fn _withdraw_from_campaign(ref self: ContractState, campaign_id: u256) -> u256 {
+            let caller = get_caller_address();
+            let mut campaign = self.campaigns.read(campaign_id);
+            let campaign_owner = campaign.owner;
+            assert(caller == campaign_owner, CALLER_NOT_CAMPAIGN_OWNER);
+            campaign.is_goal_reached = true;
+
+            let this_contract = get_contract_address();
+
+            assert(campaign.is_closed, CAMPAIGN_NOT_CLOSED);
+
+            assert(!self.campaign_withdrawn.read(campaign_id), DOUBLE_WITHDRAWAL);
+
+            let donation_token = self.donation_token.read();
+
+            let token = IERC20Dispatcher { contract_address: donation_token };
+
+            let withdrawn_amount = campaign.current_balance;
+            let transfer_from = token.transfer(campaign_owner, withdrawn_amount.clone());
+            assert(transfer_from, WITHDRAWAL_FAILED);
+
+            campaign.withdrawn_amount = campaign.withdrawn_amount + withdrawn_amount;
+            campaign.is_goal_reached = true;
+            self.campaign_closed.write(campaign_id, true);
+            self.campaigns.write(campaign_id, campaign);
+            withdrawn_amount
+        }
+
         fn get_asset_address(self: @ContractState, token_name: felt252) -> ContractAddress {
             let mut token_address: ContractAddress = contract_address_const::<0>();
             if token_name == 'USDC' || token_name == 'usdc' {
@@ -543,6 +577,14 @@ pub mod CampaignDonation {
             }
 
             token_address
+        }
+    }
+
+    #[abi(embed_v0)]
+    impl UpgradeableImpl of IUpgradeable<ContractState> {
+        fn upgrade(ref self: ContractState, new_class_hash: ClassHash) {
+            self.ownable.assert_only_owner();
+            self.upgradeable.upgrade(new_class_hash);
         }
     }
 }
