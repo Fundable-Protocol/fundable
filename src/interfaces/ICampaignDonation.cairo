@@ -17,6 +17,7 @@ pub trait ICampaignDonation<TContractState> {
     /// # Arguments
     /// * `campaign_ref` - A unique 5-character identifier for the campaign
     /// * `target_amount` - The fundraising goal amount in the donation token
+    /// * `donation_token` - The address of the donation token
     ///
     /// # Returns
     /// * `u256` - The newly created campaign's ID
@@ -26,7 +27,10 @@ pub trait ICampaignDonation<TContractState> {
     /// * If `campaign_ref` already exists
     /// * If `target_amount` is zero
     fn create_campaign(
-        ref self: TContractState, campaign_ref: felt252, target_amount: u256,
+        ref self: TContractState,
+        campaign_ref: felt252,
+        target_amount: u256,
+        donation_token: ContractAddress,
     ) -> u256;
 
     /// Makes a donation to a specific campaign
