@@ -22,8 +22,9 @@ pub mod CampaignDonation {
         CAMPAIGN_NOT_CANCELLED, CAMPAIGN_NOT_CLOSED, CAMPAIGN_NOT_FOUND, CAMPAIGN_REF_EMPTY,
         CAMPAIGN_REF_EXISTS, CAMPAIGN_WITHDRAWN, CANNOT_DENOTE_ZERO_AMOUNT, DONATION_NOT_FOUND,
         DOUBLE_WITHDRAWAL, INSUFFICIENT_ALLOWANCE, INSUFFICIENT_BALANCE, MORE_THAN_TARGET,
-        NFT_NOT_CONFIGURED, OPERATION_OVERFLOW, REFUND_ALREADY_CLAIMED, TARGET_NOT_REACHED,
-        TARGET_REACHED, WITHDRAWAL_FAILED, ZERO_ALLOWANCE, ZERO_AMOUNT,
+        NFT_NOT_CONFIGURED, OPERATION_OVERFLOW, PROTOCOL_FEE_ADDRESS_NOT_SET,
+        PROTOCOL_FEE_PERCENTAGE_EXCEED, REFUND_ALREADY_CLAIMED, TARGET_NOT_REACHED, TARGET_REACHED,
+        WITHDRAWAL_FAILED, ZERO_ALLOWANCE, ZERO_AMOUNT,
     };
     use crate::base::types::{Campaigns, DonationMetadata, Donations};
 
@@ -58,7 +59,10 @@ pub mod CampaignDonation {
         refunds_claimed: Map<(u256, ContractAddress), bool>, // Map((campaign_id, donor), claimed)
         donations_by_donor: Map<
             (u256, ContractAddress), u256,
-        > // Map((campaign_id, donor), total_donation)
+        >, // Map((campaign_id, donor), total_donation)
+        /// Protocol fee percentage using 10000 basis points (e.g. 250 = 2.5%). Default is 0.
+        protocol_fee_percent: u256,
+        protocol_fee_address: ContractAddress,
     }
 
 
@@ -146,9 +150,15 @@ pub mod CampaignDonation {
     }
 
     #[constructor]
-    fn constructor(ref self: ContractState, owner: ContractAddress, token: ContractAddress) {
+    fn constructor(
+        ref self: ContractState,
+        owner: ContractAddress,
+        token: ContractAddress,
+        protocol_fee_address: ContractAddress,
+    ) {
         self.ownable.initializer(owner);
         self.donation_token.write(token);
+        self.protocol_fee_address.write(protocol_fee_address);
     }
 
     #[abi(embed_v0)]
@@ -429,6 +439,25 @@ pub mod CampaignDonation {
                     ),
                 );
         }
+
+        fn get_protocol_fee_percent(self: @ContractState) -> u256 {
+            self.protocol_fee_percent.read()
+        }
+
+        fn set_protocol_fee_percent(ref self: ContractState, new_fee_percent: u256) {
+            self.ownable.assert_only_owner();
+            assert(new_fee_percent <= 10000, PROTOCOL_FEE_PERCENTAGE_EXCEED);
+            self.protocol_fee_percent.write(new_fee_percent);
+        }
+
+        fn get_protocol_fee_address(self: @ContractState) -> ContractAddress {
+            self.protocol_fee_address.read()
+        }
+
+        fn set_protocol_fee_address(ref self: ContractState, new_fee_address: ContractAddress) {
+            self.ownable.assert_only_owner();
+            self.protocol_fee_address.write(new_fee_address);
+        }
     }
 
     #[generate_trait]
@@ -533,10 +562,21 @@ pub mod CampaignDonation {
 
             let donation_token = self.donation_token.read();
 
-            let token = IERC20Dispatcher { contract_address: donation_token };
+            let token_dispatcher = IERC20Dispatcher { contract_address: donation_token };
 
             let withdrawn_amount = campaign.current_balance;
-            let transfer_from = token.transfer(campaign_owner, withdrawn_amount);
+            let protocol_fee = self.calculate_protocol_fee(@withdrawn_amount);
+
+            // transfer protocol fee
+            if protocol_fee > 0 {
+                let protocol_address = self.protocol_fee_address.read();
+                assert(!protocol_address.is_zero(), PROTOCOL_FEE_ADDRESS_NOT_SET);
+                let protocol_transfer = token_dispatcher.transfer(protocol_address, protocol_fee);
+                assert(protocol_transfer, WITHDRAWAL_FAILED);
+            }
+
+            let amount_after_fee = withdrawn_amount - protocol_fee;
+            let transfer_from = token_dispatcher.transfer(campaign_owner, amount_after_fee);
             assert(transfer_from, WITHDRAWAL_FAILED);
 
             campaign.withdrawn_amount = campaign.withdrawn_amount + withdrawn_amount;
@@ -546,6 +586,13 @@ pub mod CampaignDonation {
             self.campaign_withdrawn.write(campaign_id, true);
             withdrawn_amount
         }
+
+        fn calculate_protocol_fee(self: @ContractState, total_amount: @u256) -> u256 {
+            let fee_percent = self.protocol_fee_percent.read();
+            let protocol_fee = (*total_amount * fee_percent) / 10000;
+            protocol_fee
+        }
+
 
         fn get_asset_address(self: @ContractState, token_name: felt252) -> ContractAddress {
             let mut token_address: ContractAddress = contract_address_const::<0>();

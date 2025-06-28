@@ -133,5 +133,8 @@ pub mod Errors {
 
     // Throw Error when Insufficient balance
     pub const INSUFFICIENT_BALANCE: felt252 = 'Error: Insufficient balance';
+
+    // Throw Error when Fee percent exceeds 100%
+    pub const PROTOCOL_FEE_PERCENTAGE_EXCEED: felt252 = 'Error: Fee percent exceeds 100%';
 }
 
