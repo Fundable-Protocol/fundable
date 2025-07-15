@@ -85,6 +85,24 @@ pub struct DistributionHistory {
     pub timestamp: u64,
 }
 
+#[derive(Drop, Serde, Clone)]
+pub struct DonationResult {
+    pub campaign_id: u256,
+    pub amount: u256,
+    pub success: bool,
+    pub donation_id: u256,
+}
+
+#[derive(Drop, starknet::Event)]
+pub struct BatchDonationProcessed {
+    #[key]
+    pub donor: ContractAddress,
+    pub total_campaigns: u32,
+    pub successful_donations: u32,
+    pub total_amount: u256,
+    pub results: Array<DonationResult>,
+}
+
 #[derive(Copy, Drop, Serde, starknet::Store)]
 pub struct StreamMetrics {
     pub last_activity: u64,
