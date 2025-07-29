@@ -1,6 +1,9 @@
 #[starknet::contract]
 pub mod PaymentStream {
+    use core::ecdsa::check_ecdsa_signature;
+    use core::hash::{HashStateExTrait, HashStateTrait};
     use core::num::traits::{Bounded, Zero};
+    use core::pedersen::PedersenTrait;
     use core::traits::Into;
     use fundable::interfaces::IPaymentStream::IPaymentStream;
     use openzeppelin::access::accesscontrol::AccessControlComponent;
@@ -13,6 +16,10 @@ pub mod PaymentStream {
     use openzeppelin::token::erc721::{ERC721Component, ERC721HooksEmptyImpl};
     use openzeppelin::upgrades::UpgradeableComponent;
     use openzeppelin::upgrades::interface::IUpgradeable;
+    // use openzeppelin::utils::cryptography::interface::ISRC6;
+    use openzeppelin::utils::cryptography::snip12::{
+        OffchainMessageHash, SNIP12Metadata, StructHash,
+    };
     use starknet::storage::{
         Map, MutableVecTrait, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
         Vec,
@@ -22,10 +29,11 @@ pub mod PaymentStream {
     };
     use crate::base::errors::Errors::{
         DECIMALS_TOO_HIGH, FEE_TOO_HIGH, INSUFFICIENT_ALLOWANCE, INSUFFICIENT_AMOUNT,
-        INVALID_RECIPIENT, INVALID_TOKEN, NON_TRANSFERABLE_STREAM, ONLY_NFT_OWNER_CAN_DELEGATE,
-        OVERDEPOSIT, SAME_COLLECTOR_ADDRESS, SAME_OWNER, STREAM_CANCELED, STREAM_HAS_DELEGATE,
-        STREAM_NOT_ACTIVE, STREAM_NOT_PAUSED, TOO_SHORT_DURATION, UNEXISTING_STREAM,
-        WRONG_RECIPIENT, WRONG_RECIPIENT_OR_DELEGATE, WRONG_SENDER, ZERO_AMOUNT,
+        INVALID_RECIPIENT, INVALID_RECIPIENT_SIGNATURE, INVALID_TOKEN, NON_TRANSFERABLE_STREAM,
+        ONLY_NFT_OWNER_CAN_DELEGATE, OVERDEPOSIT, SAME_COLLECTOR_ADDRESS, SAME_OWNER,
+        STREAM_CANCELED, STREAM_HAS_DELEGATE, STREAM_NOT_ACTIVE, STREAM_NOT_PAUSED,
+        TOO_SHORT_DURATION, UNEXISTING_STREAM, WRONG_RECIPIENT, WRONG_RECIPIENT_OR_DELEGATE,
+        WRONG_SENDER, ZERO_AMOUNT,
     };
     use crate::base::types::{ProtocolMetrics, Stream, StreamMetrics, StreamStatus};
 
@@ -312,6 +320,30 @@ pub mod PaymentStream {
 
     #[generate_trait]
     impl InternalImpl of InternalTrait {
+        fn get_message_hash(self: @ContractState, stream_id: u256, approved: felt252) -> felt252 {
+            let mut hash_state = PedersenTrait::new(0);
+            hash_state = hash_state.update('CancelStreamMessage');
+            hash_state = hash_state.update(stream_id.low.into());
+            hash_state = hash_state.update(stream_id.high.into());
+            hash_state = hash_state.update(approved);
+            hash_state.finalize()
+        }
+
+
+        fn mutual_cancel(
+            self: @ContractState,
+            stream_id: u256,
+            sig_r: felt252,
+            sig_s: felt252,
+            recipient_pubkey: felt252,
+        ) -> bool {
+            let message_hash = self
+                .get_message_hash(stream_id, '1'); // 1 recipient has approve the cancellation 
+            let is_valid = check_ecdsa_signature(message_hash, recipient_pubkey, sig_r, sig_s);
+            assert(is_valid, INVALID_RECIPIENT_SIGNATURE);
+            return true;
+        }
+
         fn assert_stream_exists(self: @ContractState, stream_id: u256) {
             let stream = self.streams.read(stream_id);
             assert(!stream.sender.is_zero(), UNEXISTING_STREAM);
@@ -970,6 +1002,8 @@ pub mod PaymentStream {
         }
 
         fn cancel(ref self: ContractState, stream_id: u256) {
+            // check for mutual cancel approval via SNIP12
+
             self.reentrancy_guard.start();
 
             // Ensure the caller is the stream sender
