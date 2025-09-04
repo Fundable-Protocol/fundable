@@ -21,10 +21,11 @@ pub mod PaymentStream {
     };
     use crate::base::errors::Errors::{
         DECIMALS_TOO_HIGH, FEE_TOO_HIGH, INSUFFICIENT_ALLOWANCE, INSUFFICIENT_AMOUNT,
-        INVALID_RECIPIENT, INVALID_TOKEN, NON_TRANSFERABLE_STREAM, ONLY_NFT_OWNER_CAN_DELEGATE,
-        OVERDEPOSIT, SAME_COLLECTOR_ADDRESS, SAME_OWNER, STREAM_CANCELED, STREAM_HAS_DELEGATE,
-        STREAM_NOT_ACTIVE, STREAM_NOT_PAUSED, TOO_SHORT_DURATION, UNEXISTING_STREAM,
-        WRONG_RECIPIENT, WRONG_RECIPIENT_OR_DELEGATE, WRONG_SENDER, ZERO_AMOUNT,
+        INVALID_FEE_RATE, INVALID_RECIPIENT, INVALID_TOKEN, NON_TRANSFERABLE_STREAM,
+        ONLY_NFT_OWNER_CAN_DELEGATE, OVERDEPOSIT, SAME_COLLECTOR_ADDRESS, SAME_OWNER,
+        STREAM_CANCELED, STREAM_HAS_DELEGATE, STREAM_NOT_ACTIVE, STREAM_NOT_PAUSED,
+        TOO_SHORT_DURATION, UNEXISTING_STREAM, WRONG_RECIPIENT, WRONG_RECIPIENT_OR_DELEGATE,
+        WRONG_SENDER, ZERO_AMOUNT,
     };
     use crate::base::types::{ProtocolMetrics, Stream, StreamMetrics, StreamStatus};
 
@@ -1332,6 +1333,8 @@ pub mod PaymentStream {
         fn set_general_protocol_fee_rate(
             ref self: ContractState, new_general_protocol_fee_rate: u64,
         ) {
+            self.accesscontrol.assert_only_role(PROTOCOL_OWNER_ROLE);
+            assert(new_general_protocol_fee_rate <= 10000, INVALID_FEE_RATE);
             self.general_protocol_fee_rate.write(new_general_protocol_fee_rate);
             self
                 .emit(

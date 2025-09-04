@@ -138,5 +138,8 @@ pub mod Errors {
 
     // Throw Error when Fee percent exceeds 100%
     pub const PROTOCOL_FEE_PERCENTAGE_EXCEED: felt252 = 'Error: Fee percent exceeds 100%';
+
+    /// Thrown when an invalid fee rate is provided
+    pub const INVALID_FEE_RATE: felt252 = 'Error: Invalid fee rate';
 }
 

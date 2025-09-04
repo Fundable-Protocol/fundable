@@ -3,7 +3,7 @@
 # Configuration
 ACCOUNT_NAME="dev"  # Replace with your account name
 NETWORK="sepolia"         # Replace with your target network (sepolia, mainnet, etc.)
-CLASS_HASH="0x05319cc180d885f87f25300452e822491d2a412f4042c02f969291a6e3f3e95b"     # Replace with your contract's class hash after declaration    # Replace with the protocol owner address 
+CLASS_HASH="0x074098b07d7dd86bdacd596d2de8e88f6ab9ecbf04c11646e33415eec3556c47"     # Replace with your contract's class hash after declaration    # Replace with the protocol owner address 
 PROTOCOL_OWNER=0x023345e38d729e39128c0cF163e6916a343C18649f07FcC063014E63558B20f3
 GENERAL_PROTOCOL_FEE_RATE=100
 PROTOCOL_FEE_ADDRESS=0x023345e38d729e39128c0cF163e6916a343C18649f07FcC063014E63558B20f3

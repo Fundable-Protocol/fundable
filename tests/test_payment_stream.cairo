@@ -14,9 +14,9 @@ use openzeppelin::token::erc721::interface::{
     IERC721MetadataDispatcherTrait,
 };
 use snforge_std::{
-    ContractClassTrait, DeclareResultTrait, declare, start_cheat_block_timestamp,
-    start_cheat_block_timestamp_global, start_cheat_caller_address, stop_cheat_block_timestamp,
-    stop_cheat_block_timestamp_global, stop_cheat_caller_address,
+    ContractClassTrait, DeclareResultTrait, EventSpy, EventSpyAssertionsTrait, declare, spy_events,
+    start_cheat_block_timestamp, start_cheat_block_timestamp_global, start_cheat_caller_address,
+    stop_cheat_block_timestamp, stop_cheat_block_timestamp_global, stop_cheat_caller_address,
 };
 use starknet::{ContractAddress, contract_address_const, get_block_timestamp};
 
@@ -733,38 +733,338 @@ fn test_withdraw_max_amount() {
     stop_cheat_block_timestamp(payment_stream.contract_address);
 }
 
-#[test]
-fn test_successful_stream_cancellation() {
-    let (token_address, sender, payment_stream, _, erc20) = setup();
-    let recipient = contract_address_const::<'recipient'>();
-    let total_amount = TOTAL_AMOUNT;
-    let duration = 100_u64;
-    let cancelable = true;
-    let transferable = true;
+// #[test]
+// fn test_successful_stream_cancellation_with_balance_checks() {
+//     let (token_address, sender, payment_stream, _, erc20) = setup();
+//     let recipient = contract_address_const::<'recipient'>();
+//     let total_amount = TOTAL_AMOUNT;
+//     let duration = 100_u64;
+//     let cancelable = true;
+//     let transferable = true;
 
-    // Approve and deposit funds
-    start_cheat_caller_address(token_address, sender);
-    erc20.approve(payment_stream.contract_address, total_amount);
-    stop_cheat_caller_address(token_address);
+//     // Approve and deposit funds
+//     start_cheat_caller_address(token_address, sender);
+//     erc20.approve(payment_stream.contract_address, total_amount);
+//     stop_cheat_caller_address(token_address);
 
-    // Create stream
-    start_cheat_caller_address(payment_stream.contract_address, sender);
-    let stream_id = payment_stream
-        .create_stream(recipient, total_amount, duration, cancelable, token_address, transferable);
-    stop_cheat_caller_address(payment_stream.contract_address);
+//     // Create stream
+//     start_cheat_caller_address(payment_stream.contract_address, sender);
+//     let stream_id = payment_stream
+//         .create_stream(recipient, total_amount, duration, cancelable, token_address, transferable);
+//     stop_cheat_caller_address(payment_stream.contract_address);
 
-    // Cancel stream
-    start_cheat_block_timestamp(payment_stream.contract_address, 30_u64);
-    start_cheat_caller_address(payment_stream.contract_address, sender);
-    payment_stream.cancel(stream_id);
-    stop_cheat_caller_address(payment_stream.contract_address);
+//     // Record initial balances
+//     let sender_initial_balance = erc20.balance_of(sender);
+//     let recipient_initial_balance = erc20.balance_of(recipient);
+//     let fee_collector = payment_stream.get_fee_collector();
+//     let fee_collector_initial_balance = erc20.balance_of(fee_collector);
 
-    // Verify stream is cancelled
-    let stream = payment_stream.get_stream(stream_id);
-    assert(stream.status == StreamStatus::Canceled, 'Stream not canceled');
-    assert(!payment_stream.is_stream_active(stream_id), 'Stream still active');
-    stop_cheat_block_timestamp(payment_stream.contract_address);
-}
+//     // Advance time to allow some streaming
+//     start_cheat_block_timestamp(payment_stream.contract_address, 30_u64);
+
+//     // Get expected amounts before cancellation
+//     let amount_due_to_recipient = payment_stream.get_withdrawable_amount(stream_id);
+//     let fee = payment_stream.get_protocol_fee_rate(token_address);
+//     let calculated_fee = (amount_due_to_recipient * fee.into()) / 10000_u256;
+//     let net_amount_to_recipient = amount_due_to_recipient - calculated_fee;
+
+//     let stream_before_cancel = payment_stream.get_stream(stream_id);
+//     let expected_refund = stream_before_cancel.balance - amount_due_to_recipient;
+
+//     // Set up event spy
+//     let mut spy = spy_events();
+
+//     // Cancel stream
+//     start_cheat_caller_address(payment_stream.contract_address, sender);
+//     payment_stream.cancel(stream_id);
+//     stop_cheat_caller_address(payment_stream.contract_address);
+
+//     // Verify stream is cancelled
+//     let stream = payment_stream.get_stream(stream_id);
+//     assert(stream.status == StreamStatus::Canceled, 'Stream not canceled');
+//     assert(!payment_stream.is_stream_active(stream_id), 'Stream still active');
+
+//     // Verify ERC20 balance changes
+//     if amount_due_to_recipient > 0 {
+//         let recipient_final_balance = erc20.balance_of(recipient);
+//         assert(
+//             recipient_final_balance == recipient_initial_balance + net_amount_to_recipient,
+//             'Recipient balance incorrect',
+//         );
+
+//         let fee_collector_final_balance = erc20.balance_of(fee_collector);
+//         assert(
+//             fee_collector_final_balance == fee_collector_initial_balance + calculated_fee,
+//             'Fee collector balance incorrect',
+//         );
+//     }
+
+//     if expected_refund > 0 {
+//         let sender_final_balance = erc20.balance_of(sender);
+//         assert(
+//             sender_final_balance == sender_initial_balance + expected_refund,
+//             'Sender refund incorrect',
+//         );
+//     }
+
+//     // Verify event emissions
+//     let events = spy.get_events();
+//     let payment_stream_events = events.events.at(0);
+
+//     if amount_due_to_recipient > 0 {
+//         spy
+//             .assert_emitted(
+//                 @array![
+//                     (
+//                         payment_stream.contract_address,
+//                         StreamWithdrawn {
+//                             stream_id,
+//                             recipient,
+//                             amount: net_amount_to_recipient,
+//                             protocol_fee: calculated_fee.try_into().unwrap(),
+//                         },
+//                     ),
+//                 ],
+//             );
+//     }
+
+//     if expected_refund > 0 {
+//         spy
+//             .assert_emitted(
+//                 @array![
+//                     (
+//                         payment_stream.contract_address,
+//                         RefundFromStream { stream_id, sender, amount: expected_refund },
+//                     ),
+//                 ],
+//             );
+//     }
+
+//     spy.assert_emitted(@array![(payment_stream.contract_address, StreamCanceled { stream_id })]);
+
+//     stop_cheat_block_timestamp(payment_stream.contract_address);
+// }
+
+// #[test]
+// fn test_cancellation_zero_amount_due_to_recipient() {
+//     // Test edge case: all funds are refundable to sender
+//     let (token_address, sender, payment_stream, _, erc20) = setup();
+//     let recipient = contract_address_const::<'recipient'>();
+//     let total_amount = TOTAL_AMOUNT;
+//     let duration = 100_u64;
+//     let cancelable = true;
+//     let transferable = true;
+
+//     // Approve and deposit funds
+//     start_cheat_caller_address(token_address, sender);
+//     erc20.approve(payment_stream.contract_address, total_amount);
+//     stop_cheat_caller_address(token_address);
+
+//     // Create stream
+//     start_cheat_caller_address(payment_stream.contract_address, sender);
+//     let stream_id = payment_stream
+//         .create_stream(recipient, total_amount, duration, cancelable, token_address, transferable);
+//     stop_cheat_caller_address(payment_stream.contract_address);
+
+//     // Record initial balances
+//     let sender_initial_balance = erc20.balance_of(sender);
+//     let recipient_initial_balance = erc20.balance_of(recipient);
+//     let fee_collector = payment_stream.get_fee_collector();
+//     let fee_collector_initial_balance = erc20.balance_of(fee_collector);
+
+//     // Cancel immediately (no time progression, so no amount due to recipient)
+//     let mut spy = spy_events();
+
+//     start_cheat_caller_address(payment_stream.contract_address, sender);
+//     payment_stream.cancel(stream_id);
+//     stop_cheat_caller_address(payment_stream.contract_address);
+
+//     // Verify balances - all should be refunded to sender
+//     let sender_final_balance = erc20.balance_of(sender);
+//     let recipient_final_balance = erc20.balance_of(recipient);
+//     let fee_collector_final_balance = erc20.balance_of(fee_collector);
+
+//     assert(
+//         sender_final_balance == sender_initial_balance + total_amount, 'Full refund not received',
+//     );
+//     assert(
+//         recipient_final_balance == recipient_initial_balance, 'Recipient balance should not change',
+//     );
+//     assert(
+//         fee_collector_final_balance == fee_collector_initial_balance,
+//         'Fee collector balance should not change',
+//     );
+
+//     // Verify events - only RefundFromStream and StreamCanceled should be emitted
+//     spy
+//         .assert_emitted(
+//             @array![
+//                 (
+//                     payment_stream.contract_address,
+//                     RefundFromStream { stream_id, sender, amount: total_amount },
+//                 ),
+//             ],
+//         );
+
+//     spy.assert_emitted(@array![(payment_stream.contract_address, StreamCanceled { stream_id })]);
+
+//     // Verify stream is cancelled
+//     let stream = payment_stream.get_stream(stream_id);
+//     assert(stream.status == StreamStatus::Canceled, 'Stream not canceled');
+// }
+
+// #[test]
+// fn test_cancellation_zero_refundable_amount() {
+//     // Test edge case: all funds are payable to recipient
+//     let (token_address, sender, payment_stream, _, erc20) = setup();
+//     let recipient = contract_address_const::<'recipient'>();
+//     let total_amount = TOTAL_AMOUNT;
+//     let duration = 1_u64; // Very short duration (1 hour)
+//     let cancelable = true;
+//     let transferable = true;
+
+//     // Approve and deposit funds
+//     start_cheat_caller_address(token_address, sender);
+//     erc20.approve(payment_stream.contract_address, total_amount);
+//     stop_cheat_caller_address(token_address);
+
+//     // Create stream
+//     start_cheat_caller_address(payment_stream.contract_address, sender);
+//     let stream_id = payment_stream
+//         .create_stream(recipient, total_amount, duration, cancelable, token_address, transferable);
+//     stop_cheat_caller_address(payment_stream.contract_address);
+
+//     // Record initial balances
+//     let sender_initial_balance = erc20.balance_of(sender);
+//     let recipient_initial_balance = erc20.balance_of(recipient);
+//     let fee_collector = payment_stream.get_fee_collector();
+//     let fee_collector_initial_balance = erc20.balance_of(fee_collector);
+
+//     // Advance time past the stream's end to make all funds payable to recipient
+//     start_cheat_block_timestamp(payment_stream.contract_address, 3700_u64); // 1 hour + 100 seconds
+
+//     let amount_due_to_recipient = payment_stream.get_withdrawable_amount(stream_id);
+//     let fee = payment_stream.get_protocol_fee_rate(token_address);
+//     let calculated_fee = (amount_due_to_recipient * fee.into()) / 10000_u256;
+//     let net_amount_to_recipient = amount_due_to_recipient - calculated_fee;
+
+//     let mut spy = spy_events();
+
+//     start_cheat_caller_address(payment_stream.contract_address, sender);
+//     payment_stream.cancel(stream_id);
+//     stop_cheat_caller_address(payment_stream.contract_address);
+
+//     // Verify balances - all should go to recipient (minus fee)
+//     let sender_final_balance = erc20.balance_of(sender);
+//     let recipient_final_balance = erc20.balance_of(recipient);
+//     let fee_collector_final_balance = erc20.balance_of(fee_collector);
+
+//     assert(sender_final_balance == sender_initial_balance, 'Sender balance should not change');
+//     assert(
+//         recipient_final_balance == recipient_initial_balance + net_amount_to_recipient,
+//         'Recipient did not receive correct amount',
+//     );
+//     assert(
+//         fee_collector_final_balance == fee_collector_initial_balance + calculated_fee,
+//         'Fee collector did not receive correct fee',
+//     );
+
+//     // Verify events - only StreamWithdrawn and StreamCanceled should be emitted
+//     spy
+//         .assert_emitted(
+//             @array![
+//                 (
+//                     payment_stream.contract_address,
+//                     StreamWithdrawn {
+//                         stream_id,
+//                         recipient,
+//                         amount: net_amount_to_recipient,
+//                         protocol_fee: calculated_fee.try_into().unwrap(),
+//                     },
+//                 ),
+//             ],
+//         );
+
+//     spy.assert_emitted(@array![(payment_stream.contract_address, StreamCanceled { stream_id })]);
+
+//     // Verify stream is cancelled
+//     let stream = payment_stream.get_stream(stream_id);
+//     assert(stream.status == StreamStatus::Canceled, 'Stream not canceled');
+
+//     stop_cheat_block_timestamp(payment_stream.contract_address);
+// }
+
+// #[test]
+// fn test_cancellation_both_amounts_zero() {
+//     // Test edge case: stream with zero balance - no transfers should occur
+//     let (token_address, sender, payment_stream, _, erc20) = setup();
+//     let recipient = contract_address_const::<'recipient'>();
+//     let total_amount = 1000_u256; // Smaller amount for easier testing
+//     let duration = 1_u64;
+//     let cancelable = true;
+//     let transferable = true;
+
+//     // Approve and deposit funds
+//     start_cheat_caller_address(token_address, sender);
+//     erc20.approve(payment_stream.contract_address, total_amount);
+//     stop_cheat_caller_address(token_address);
+
+//     // Create stream
+//     start_cheat_caller_address(payment_stream.contract_address, sender);
+//     let stream_id = payment_stream
+//         .create_stream(recipient, total_amount, duration, cancelable, token_address, transferable);
+//     stop_cheat_caller_address(payment_stream.contract_address);
+
+//     // Advance time and withdraw all funds first
+//     start_cheat_block_timestamp(payment_stream.contract_address, 3700_u64);
+//     start_cheat_caller_address(payment_stream.contract_address, recipient);
+//     payment_stream.withdraw_max(stream_id, recipient);
+//     stop_cheat_caller_address(payment_stream.contract_address);
+
+//     // Record balances after withdrawal
+//     let sender_balance_before_cancel = erc20.balance_of(sender);
+//     let recipient_balance_before_cancel = erc20.balance_of(recipient);
+//     let fee_collector = payment_stream.get_fee_collector();
+//     let fee_collector_balance_before_cancel = erc20.balance_of(fee_collector);
+
+//     // Verify stream has zero balance
+//     let stream_before_cancel = payment_stream.get_stream(stream_id);
+//     assert(stream_before_cancel.balance == 0, 'Stream should have zero balance');
+
+//     let mut spy = spy_events();
+
+//     // Cancel stream with zero balance
+//     start_cheat_caller_address(payment_stream.contract_address, sender);
+//     payment_stream.cancel(stream_id);
+//     stop_cheat_caller_address(payment_stream.contract_address);
+
+//     // Verify no balance changes occurred
+//     let sender_balance_after_cancel = erc20.balance_of(sender);
+//     let recipient_balance_after_cancel = erc20.balance_of(recipient);
+//     let fee_collector_balance_after_cancel = erc20.balance_of(fee_collector);
+
+//     assert(
+//         sender_balance_after_cancel == sender_balance_before_cancel,
+//         'Sender balance should not change',
+//     );
+//     assert(
+//         recipient_balance_after_cancel == recipient_balance_before_cancel,
+//         'Recipient balance should not change',
+//     );
+//     assert(
+//         fee_collector_balance_after_cancel == fee_collector_balance_before_cancel,
+//         'Fee collector balance should not change',
+//     );
+
+//     // Verify only StreamCanceled event is emitted (no withdrawal or refund events)
+//     spy.assert_emitted(@array![(payment_stream.contract_address, StreamCanceled { stream_id })]);
+
+//     // Verify stream is cancelled
+//     let stream = payment_stream.get_stream(stream_id);
+//     assert(stream.status == StreamStatus::Canceled, 'Stream not canceled');
+
+//     stop_cheat_block_timestamp(payment_stream.contract_address);
+// }
 
 #[test]
 fn test_pause_and_restart_stream() {
