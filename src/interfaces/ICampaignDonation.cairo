@@ -107,6 +107,7 @@ pub trait ICampaignDonation<TContractState> {
     /// # Returns
     /// * `Array<Donations>` - An array of all donations made to the campaign
     fn get_campaign_donations(self: @TContractState, campaign_id: u256) -> Array<Donations>;
+
     /// Sets the address of the donation NFT contract
     ///
     /// # Arguments
@@ -122,6 +123,7 @@ pub trait ICampaignDonation<TContractState> {
     /// # Returns
     /// * `u256` - The token ID of the minted NFT
     fn mint_donation_nft(ref self: TContractState, campaign_id: u256, donation_id: u256) -> u256;
+
     // *************************************************************************
     //                        USER EXPERIENCE ENHANCEMENTS
     // *************************************************************************
@@ -161,9 +163,11 @@ pub trait ICampaignDonation<TContractState> {
     ///
     /// # Returns
     /// * `Array<(u256, Donations)>` - Array of tuples (campaign_id, donation)
+
     fn get_donations_by_donor(
         self: @TContractState, donor: ContractAddress,
     ) -> Array<(u256, Donations)>;
+
 
     /// Gets the total amount donated by a specific address
     ///
@@ -172,7 +176,9 @@ pub trait ICampaignDonation<TContractState> {
     ///
     /// # Returns
     /// * `u256` - Total amount donated across all campaigns
+
     fn get_total_donated_by_donor(self: @TContractState, donor: ContractAddress) -> u256;
+
 
     /// Checks if a donor has contributed to a specific campaign
     ///
@@ -182,6 +188,7 @@ pub trait ICampaignDonation<TContractState> {
     ///
     /// # Returns
     /// * `bool` - True if the donor has contributed, false otherwise
+
     fn has_donated_to_campaign(
         self: @TContractState, campaign_id: u256, donor: ContractAddress,
     ) -> bool;
@@ -239,31 +246,33 @@ pub trait ICampaignDonation<TContractState> {
     /// @return The address where protocol fees are sent
     fn get_protocol_fee_address(self: @TContractState) -> ContractAddress;
 
+
     /// @notice Sets a new protocol fee collection address
     /// @param new_fee_address The new address to collect protocol fees
     fn set_protocol_fee_address(ref self: TContractState, new_fee_address: ContractAddress);
     // *************************************************************************
-//                        ANALYTICS & INSIGHTS
-// *************************************************************************
+    //                        ANALYTICS & INSIGHTS
+    // *************************************************************************
 
     /// Gets the progress percentage of a campaign
-///
-/// # Arguments
-/// * `campaign_id` - The campaign ID
-///
-/// # Returns
-/// * `u8` - Progress percentage (0-100)
-// fn get_campaign_progress(self: @TContractState, campaign_id: u256) -> u8;
+    ///
+    /// # Arguments
+    /// * `campaign_id` - The campaign ID
+    ///
+    /// # Returns
+    /// * `u8` - Progress percentage (0-100)
+
+    fn get_campaign_progress(self: @TContractState, campaign_id: u256) -> u8;
 
     /// Gets the number of unique donors for a campaign
-///
-/// # Arguments
-/// * `campaign_id` - The campaign ID
-///
-/// # Returns
-/// * `u32` - Number of unique donors
-// fn get_campaign_donor_count(self: @TContractState, campaign_id: u256) -> u32;
+    ///
+    /// # Arguments
+    /// * `campaign_id` - The campaign ID
+    ///
+    /// # Returns
+    /// * `u32` - Number of unique donors
 
+    fn get_campaign_donor_count(self: @TContractState, campaign_id: u256) -> u32;
     /// Gets campaigns close to reaching their goal
 ///
 /// # Arguments

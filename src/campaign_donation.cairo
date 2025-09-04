@@ -63,6 +63,10 @@ pub mod CampaignDonation {
         /// Protocol fee percentage using 10000 basis points (e.g. 250 = 2.5%). Default is 0.
         protocol_fee_percent: u256,
         protocol_fee_address: ContractAddress,
+        unique_donors_count: Map<u256, u32>, // Number of unique donors per campaign
+        campaign_donors: Map<
+            (u256, ContractAddress), bool,
+        > // Track if an address has donated to a campaign
     }
 
 
@@ -285,6 +289,43 @@ pub mod CampaignDonation {
         fn get_campaign(self: @ContractState, campaign_id: u256) -> Campaigns {
             let campaign: Campaigns = self.campaigns.read(campaign_id);
             campaign
+        }
+
+        fn get_campaign_progress(self: @ContractState, campaign_id: u256) -> u8 {
+            // Validate campaign exists
+            assert(campaign_id > 0, CAMPAIGN_NOT_FOUND);
+            assert(campaign_id <= self.campaign_counts.read(), CAMPAIGN_NOT_FOUND);
+
+            let campaign: Campaigns = self.campaigns.read(campaign_id);
+            if campaign.target_amount == 0 {
+                return 0_u8;
+            }
+
+            let progress = (campaign.current_balance * 100) / campaign.target_amount;
+
+            // // Cap at 100% for overfunded campaigns
+            if progress > 100_u256 {
+                return 100_u8;
+            }
+
+            // Convert the calculated progress to u8 using try_into().
+            // Since we already capped at 100, this should always succeed
+            let progress_u8: u8 = match progress.try_into() {
+                Option::Some(val) => val,
+                Option::None => 100_u8 // Fallback to 100% if conversion fails
+            };
+
+            progress_u8
+        }
+
+
+        fn get_campaign_donor_count(self: @ContractState, campaign_id: u256) -> u32 {
+            // Validate campaign exists
+            assert(campaign_id > 0, CAMPAIGN_NOT_FOUND);
+            assert(campaign_id <= self.campaign_counts.read(), CAMPAIGN_NOT_FOUND);
+
+            // Simply return the stored count of unique donors
+            self.unique_donors_count.read(campaign_id)
         }
         fn set_donation_nft_address(
             ref self: ContractState, donation_nft_address: ContractAddress,
@@ -551,6 +592,15 @@ pub mod CampaignDonation {
 
             // Save donation reference for the donor
             self.donor_donations.entry(donor).push((campaign_id, donation_id));
+
+            // Update unique donor count if this is the first donation from this donor to this
+            // campaign
+            let has_donated_before = self.campaign_donors.read((campaign_id, donor));
+            if !has_donated_before {
+                self.campaign_donors.write((campaign_id, donor), true);
+                let current_unique_donors = self.unique_donors_count.read(campaign_id);
+                self.unique_donors_count.write(campaign_id, current_unique_donors + 1);
+            }
 
             // Update the per-campaign donation count
             let campaign_donation_count = self.donation_counts.read(campaign_id);
