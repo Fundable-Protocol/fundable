@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # Configuration
-ACCOUNT_NAME="dev"  # Replace with your account name
-NETWORK="sepolia"         # Replace with your target network (sepolia, mainnet, etc.)
-CLASS_HASH="0x05319cc180d885f87f25300452e822491d2a412f4042c02f969291a6e3f3e95b"     # Replace with your contract's class hash after declaration    # Replace with the protocol owner address 
-PROTOCOL_OWNER=0x023345e38d729e39128c0cF163e6916a343C18649f07FcC063014E63558B20f3
+ACCOUNT_NAME="dev_mainnet"  # Replace with your account name
+NETWORK="mainnet"         # Replace with your target network (sepolia, mainnet, etc.)
+CLASS_HASH="0x00d4848abd500e9daa9a64ce23976308fdebee4fa322ac8ce008b72cbf4b4465"     # Replace with your contract's class hash after declaration    # Replace with the protocol owner address 
+PROTOCOL_OWNER=0x004bB7b2bb4180Eb1da851497715A07abC6DcB64f81f7A7e4a3fb7d3ea04D9Fc
 GENERAL_PROTOCOL_FEE_RATE=100
-PROTOCOL_FEE_ADDRESS=0x023345e38d729e39128c0cF163e6916a343C18649f07FcC063014E63558B20f3
+PROTOCOL_FEE_ADDRESS=0x004bB7b2bb4180Eb1da851497715A07abC6DcB64f81f7A7e4a3fb7d3ea04D9Fc
 
 # Check if sncast is installed
 if ! command -v sncast &> /dev/null; then

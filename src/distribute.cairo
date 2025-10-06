@@ -159,7 +159,7 @@ mod Distributor {
 
             // Perform distribution
             let recipients_list = recipients.span();
-            for recipient in recipients {
+            for recipient in recipients.clone() {
                 token_dispatcher.transfer_from(caller, recipient, amount);
                 self.emit(WeightedDistribution { caller, token, recipient, amount, unique_ref });
             }
@@ -192,6 +192,7 @@ mod Distributor {
                             amount: amount_to_distribute,
                             recipients_count: recipients_list.len(),
                             unique_ref,
+                            recipients,
                         },
                     ),
                 );
@@ -278,6 +279,7 @@ mod Distributor {
                             amount: amount_to_distribute,
                             recipients_count: recipients.len(),
                             unique_ref,
+                            recipients
                         },
                     ),
                 );

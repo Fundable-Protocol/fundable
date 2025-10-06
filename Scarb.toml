@@ -7,14 +7,10 @@ edition = "2023_11"
 
 [dependencies]
 openzeppelin = "1.0.0"
-starknet = "2.11.2"
-
-[profile.dev.cairo]
-unstable-add-statements-code-locations-debug-info = true
-unstable-add-statements-functions-debug-info = true
+starknet = "2.12.2"
 
 [dev-dependencies]
-snforge_std = "0.40.0"
+snforge_std = "0.48.0"
 assert_macros = "2.11.2"
 
 [[target.starknet-contract]]

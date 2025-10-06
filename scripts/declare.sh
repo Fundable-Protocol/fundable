@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Configuration
-ACCOUNT_NAME="dev"  # account name
-NETWORK="sepolia"         # target network (sepolia, mainnet, etc.)
+ACCOUNT_NAME="dev_mainnet"  # account name
+NETWORK="mainnet"         # target network (sepolia, mainnet, etc.)
 CONTRACT_NAME="PaymentStream"  # The contract name
 
 # Check if sncast is installed
@@ -17,6 +17,7 @@ sncast --account $ACCOUNT_NAME \
     declare \
     --network $NETWORK \
     --contract-name $CONTRACT_NAME
+    
 
 # Check if the declaration was successful
 if [ $? -eq 0 ]; then

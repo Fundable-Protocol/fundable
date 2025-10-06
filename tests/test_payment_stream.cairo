@@ -1296,3 +1296,77 @@ fn test_withdrawable_amount_after_pause() {
     assert(post_pause_amount == pre_pause_amount, 'amount should not increase');
     stop_cheat_block_timestamp(payment_stream.contract_address);
 }
+
+#[test]
+fn test_withdraw_max_after_partial_withdrawal() {
+    let (token_address, sender, payment_stream, _, erc20) = setup();
+    let total_amount = TOTAL_AMOUNT;
+    let duration = 30_u64;
+    let cancelable = true;
+    let transferable = true;
+
+    // Create stream
+    start_cheat_caller_address(token_address, sender);
+    erc20.approve(payment_stream.contract_address, total_amount);
+    stop_cheat_caller_address(token_address);
+
+    start_cheat_caller_address(payment_stream.contract_address, sender);
+    let stream_id = payment_stream
+        .create_stream(sender, total_amount, duration, cancelable, token_address, transferable);
+    stop_cheat_caller_address(payment_stream.contract_address);
+
+    // Advance time to accrue some withdrawable amount
+    start_cheat_block_timestamp(payment_stream.contract_address, 500);
+
+    // Get current withdrawable amount
+    let withdrawable = payment_stream.get_withdrawable_amount(stream_id);
+    assert(withdrawable > 0, 'Should have withdrawable amount');
+
+    // Withdraw a portion (e.g., half)
+    let partial_amount = withdrawable / 2;
+    start_cheat_caller_address(payment_stream.contract_address, sender);
+    let (withdrawn1, fee1) = payment_stream.withdraw(stream_id, partial_amount, sender);
+    stop_cheat_caller_address(payment_stream.contract_address);
+
+    // Check that the withdrawn amount is as expected
+    assert(withdrawn1 == partial_amount.try_into().unwrap() - fee1, 'partial withdrawal failed');
+
+    // Advance time to accrue more withdrawable (simulate more stream time)
+    stop_cheat_block_timestamp(payment_stream.contract_address);
+
+    // Second partial withdrawal
+    start_cheat_block_timestamp(payment_stream.contract_address, 500);
+
+    let withdrawable = payment_stream.get_withdrawable_amount(stream_id);
+
+    // Withdraw a portion (e.g., half)
+    let partial_amount = withdrawable / 2;
+    start_cheat_caller_address(payment_stream.contract_address, sender);
+    let (withdrawn1, fee1) = payment_stream.withdraw(stream_id, partial_amount, sender);
+    stop_cheat_caller_address(payment_stream.contract_address);
+
+    // Check that the withdrawn amount is as expected
+    assert(withdrawn1 == partial_amount.try_into().unwrap() - fee1, 'partial withdrawal failed');
+
+    // Advance time to accrue more withdrawable (simulate more stream time)
+    stop_cheat_block_timestamp(payment_stream.contract_address);
+    start_cheat_block_timestamp(payment_stream.contract_address, 200);
+
+    // Now try to withdraw the max remaining amount
+    let withdrawable_after = payment_stream.get_withdrawable_amount(stream_id);
+    assert(withdrawable_after > 0, 'withdrawable partial withdrawal');
+
+    start_cheat_caller_address(payment_stream.contract_address, sender);
+    let (withdrawn2, fee2) = payment_stream.withdraw_max(stream_id, sender);
+    stop_cheat_caller_address(payment_stream.contract_address);
+
+    // The withdrawn2 should be equal to withdrawable_after
+    assert(withdrawn2 == withdrawable_after.try_into().unwrap() - fee2, 'withdraw all remaining');
+
+    // After withdrawing max, withdrawable should be zero
+    let withdrawable_final = payment_stream.get_withdrawable_amount(stream_id);
+    assert(withdrawable_final == 0, 'No after withdraw_max');
+
+    stop_cheat_block_timestamp(payment_stream.contract_address);
+}
+

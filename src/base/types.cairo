@@ -32,6 +32,8 @@ pub struct Distribution {
     pub unique_ref: felt252,
     #[key]
     pub recipients_count: u32,
+    #[key]
+    pub recipients: Array<ContractAddress>,
 }
 
 #[derive(Drop, starknet::Event)]

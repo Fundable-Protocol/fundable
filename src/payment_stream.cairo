@@ -715,9 +715,6 @@ pub mod PaymentStream {
             let aggregate_balance = self.aggregate_balance.read(token_address) - amount;
             self.aggregate_balance.write(token_address, aggregate_balance);
 
-            // Update snapshot after withdrawal
-            self._update_snapshot(stream_id);
-
             // Update stream metrics
             let mut metrics = self.stream_metrics.read(stream_id);
             metrics.total_withdrawn += amount;
