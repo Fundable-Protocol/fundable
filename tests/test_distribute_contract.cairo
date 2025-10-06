@@ -675,8 +675,7 @@ fn test_successful_distribution() {
 
     // Create recipients array
     let mut recipients = array![
-        contract_address_const::<0x2>(),
-        contract_address_const::<0x3>(),
+        contract_address_const::<0x2>(), contract_address_const::<0x3>(),
         contract_address_const::<0x4>(),
     ];
 
@@ -806,8 +805,7 @@ fn test_weighted_distribution() {
 
     // Create recipients array
     let recipients = array![
-        contract_address_const::<0x2>(),
-        contract_address_const::<0x3>(),
+        contract_address_const::<0x2>(), contract_address_const::<0x3>(),
         contract_address_const::<0x4>(),
     ];
 
@@ -971,8 +969,7 @@ fn test_total_distribution_after_single_distribution() {
 
     // Create recipients array
     let mut recipients = array![
-        contract_address_const::<0x2>(),
-        contract_address_const::<0x3>(),
+        contract_address_const::<0x2>(), contract_address_const::<0x3>(),
         contract_address_const::<0x4>(),
     ];
 
@@ -1058,8 +1055,7 @@ fn test_total_distributed_amount_after_single_distribution() {
 
     // Create recipients array
     let mut recipients = array![
-        contract_address_const::<0x2>(),
-        contract_address_const::<0x3>(),
+        contract_address_const::<0x2>(), contract_address_const::<0x3>(),
         contract_address_const::<0x4>(),
     ];
 
@@ -1161,8 +1157,7 @@ fn test_token_stats_after_distribution() {
 
     // Create recipients array
     let mut recipients = array![
-        contract_address_const::<0x2>(),
-        contract_address_const::<0x3>(),
+        contract_address_const::<0x2>(), contract_address_const::<0x3>(),
         contract_address_const::<0x4>(),
     ];
 
@@ -1219,8 +1214,7 @@ fn test_user_stats_after_distribution() {
 
     // Create recipients array
     let mut recipients = array![
-        contract_address_const::<0x2>(),
-        contract_address_const::<0x3>(),
+        contract_address_const::<0x2>(), contract_address_const::<0x3>(),
         contract_address_const::<0x4>(),
     ];
 
@@ -1275,8 +1269,7 @@ fn test_distribution_history_after_distribution() {
 
     // Create recipients array
     let mut recipients = array![
-        contract_address_const::<0x2>(),
-        contract_address_const::<0x3>(),
+        contract_address_const::<0x2>(), contract_address_const::<0x3>(),
         contract_address_const::<0x4>(),
     ];
 

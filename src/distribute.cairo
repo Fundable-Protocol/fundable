@@ -279,7 +279,7 @@ mod Distributor {
                             amount: amount_to_distribute,
                             recipients_count: recipients.len(),
                             unique_ref,
-                            recipients
+                            recipients,
                         },
                     ),
                 );

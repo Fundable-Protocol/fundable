@@ -335,7 +335,7 @@ pub mod CampaignDonation {
             // Set the donation NFT address
             self.donation_nft_address.write(donation_nft_address);
         }
-        
+
         fn mint_donation_nft(
             ref self: ContractState, campaign_id: u256, donation_id: u256,
         ) -> u256 {
