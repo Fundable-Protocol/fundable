@@ -6,7 +6,7 @@ on:
   pull_request:
 
 env:
-  SCARB_VERSION: 2.11.3
+  SCARB_VERSION: 2.12.2
 
 jobs:
   check:
@@ -39,12 +39,12 @@ jobs:
       - name: Set up Scarb
         uses: software-mansion/setup-scarb@v1
         with:
-          scarb-version: "2.11.3"
+          scarb-version: "2.12.2"
 
       - name: Set up snforge
         uses: foundry-rs/setup-snfoundry@v3
         with:
-          starknet-foundry-version: "0.38.3"
+          starknet-foundry-version: "0.48.0"
 
       - name: Run tests
         run: snforge test
