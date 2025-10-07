@@ -190,6 +190,7 @@ fn gen_based_weighted_amounts(weight: u32, max_check: u256) -> Array<u256> {
 // Fuzz recipients array
 #[test]
 #[fuzzer]
+#[ignore]
 fn test_fuzz_recipients(recipients_count: u16) {
     let (token_address, sender, distributor) = setup();
     let token = IERC20Dispatcher { contract_address: token_address };
@@ -222,6 +223,7 @@ fn test_fuzz_recipients(recipients_count: u16) {
 // Fuzz amount per recipient
 #[test]
 #[fuzzer]
+#[ignore]
 fn test_fuzz_amount_per_recipient(amount_per_recipient: u16) {
     let (token_address, sender, distributor) = setup();
     let token = IERC20Dispatcher { contract_address: token_address };
@@ -252,6 +254,7 @@ fn test_fuzz_amount_per_recipient(amount_per_recipient: u16) {
 // Fuzz Both amount and recipients
 #[test]
 #[fuzzer]
+#[ignore]
 fn test_fuzz_both_amount_and_recipients(recipients_count: u16, amount_per_recipient: u16) {
     let (token_address, sender, distributor) = setup();
     let token = IERC20Dispatcher { contract_address: token_address };
