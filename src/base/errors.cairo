@@ -138,5 +138,8 @@ pub mod Errors {
 
     // Throw Error when Fee percent exceeds 100%
     pub const PROTOCOL_FEE_PERCENTAGE_EXCEED: felt252 = 'Error: Fee percent exceeds 100%';
+
+    // Throw Error when Total amount must be > 0
+    pub const TOTAL_DONATION_AMOUNT: felt252 = 'Error: Total amount must be > 0';
 }
 
