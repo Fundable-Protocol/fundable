@@ -138,5 +138,8 @@ pub mod Errors {
 
     // Throw Error when Fee percent exceeds 100%
     pub const PROTOCOL_FEE_PERCENTAGE_EXCEED: felt252 = 'Error: Fee percent exceeds 100%';
+
+    // Throw Error when Invalid recipient signature
+    pub const INVALID_RECIPIENT_SIGNATURE: felt252 = 'Error: No recipient signature';
 }
 
