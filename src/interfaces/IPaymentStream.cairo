@@ -64,6 +64,11 @@ pub trait IPaymentStream<TContractState> {
     /// @param stream_id The ID of the stream to cancel
     fn cancel(ref self: TContractState, stream_id: u256);
 
+    /// @notice Cancels the stream consensually with a signature from the counterparty
+    /// @param stream_id The ID of the stream to cancel
+    /// @param signature The signature from the counterparty authorizing cancellation
+    fn cancel_consensual(ref self: TContractState, stream_id: u256, signature: Array<felt252>);
+
     /// @notice Pauses the stream
     /// @param stream_id The ID of the stream to pause
     fn pause(ref self: TContractState, stream_id: u256);

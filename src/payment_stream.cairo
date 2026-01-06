@@ -1,9 +1,12 @@
 #[starknet::contract]
 pub mod PaymentStream {
+    use core::hash::{HashStateExTrait, HashStateTrait};
     use core::num::traits::{Bounded, Zero};
+    use core::poseidon::PoseidonTrait;
     use core::traits::Into;
     use fundable::interfaces::IPaymentStream::IPaymentStream;
     use openzeppelin::access::accesscontrol::AccessControlComponent;
+    use openzeppelin::account::interface::{ISRC6Dispatcher, ISRC6DispatcherTrait};
     use openzeppelin::introspection::src5::SRC5Component;
     use openzeppelin::security::reentrancyguard::ReentrancyGuardComponent;
     use openzeppelin::token::erc20::interface::{
@@ -13,6 +16,9 @@ pub mod PaymentStream {
     use openzeppelin::token::erc721::{ERC721Component, ERC721HooksEmptyImpl};
     use openzeppelin::upgrades::UpgradeableComponent;
     use openzeppelin::upgrades::interface::IUpgradeable;
+    use openzeppelin::utils::cryptography::snip12::{
+        OffchainMessageHash, SNIP12Metadata, StructHash,
+    };
     use starknet::storage::{
         Map, MutableVecTrait, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
         Vec,
@@ -119,6 +125,7 @@ pub mod PaymentStream {
         RefundFromStream: RefundFromStream,
         FeeCollectorUpdated: FeeCollectorUpdated,
         ProtocolOwnerUpdated: ProtocolOwnerUpdated,
+        ConsensualCancel: ConsensualCancel,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -145,6 +152,31 @@ pub mod PaymentStream {
         total_amount: u256,
         token: ContractAddress,
         transferable: bool,
+    }
+
+    #[derive(Drop, Hash, Copy)]
+    pub struct CancelRequest {
+        pub stream_id: u256,
+    }
+
+    pub const CANCEL_REQUEST_TYPE_HASH: felt252 = selector!("CancelRequest(stream_id:u256)");
+
+    impl StructHashImpl of StructHash<CancelRequest> {
+        fn hash_struct(self: @CancelRequest) -> felt252 {
+            let mut state = PoseidonTrait::new();
+            state = state.update_with(CANCEL_REQUEST_TYPE_HASH);
+            state = state.update_with(*self);
+            state.finalize()
+        }
+    }
+
+    impl SNIP12MetadataImpl of SNIP12Metadata {
+        fn name() -> felt252 {
+            'PaymentStream'
+        }
+        fn version() -> felt252 {
+            '1'
+        }
     }
 
     #[derive(Drop, starknet::Event)]
@@ -252,6 +284,14 @@ pub mod PaymentStream {
         new_protocol_owner: ContractAddress,
         #[key]
         old_protocol_owner: ContractAddress,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct ConsensualCancel {
+        #[key]
+        pub stream_id: u256,
+        pub caller: ContractAddress,
+        pub signer: ContractAddress,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -765,6 +805,130 @@ pub mod PaymentStream {
             // Emit event
             self.emit(RefundFromStream { stream_id, sender, amount });
         }
+
+        fn _cancel_internal(ref self: ContractState, stream_id: u256) {
+            // Retrieve the stream
+            let mut stream = self.streams.read(stream_id);
+
+            let stream_balance = stream.balance;
+            let token_address = stream.token;
+            let recipient = stream.recipient;
+
+            // Ensure the stream is active before cancellation
+            self.assert_stream_exists(stream_id);
+
+            // Only decrement counter if stream was active
+            if stream.status == StreamStatus::Active {
+                let protocol_metrics = self.protocol_metrics.read();
+                self
+                    .protocol_metrics
+                    .write(
+                        ProtocolMetrics {
+                            total_active_streams: protocol_metrics.total_active_streams - 1,
+                            total_tokens_to_stream: protocol_metrics.total_tokens_to_stream,
+                            total_streams_created: protocol_metrics.total_streams_created,
+                            total_delegations: protocol_metrics.total_delegations,
+                        },
+                    );
+            }
+
+            // Update snapshot before calculations
+            self._update_snapshot(stream_id);
+
+            // Calculate total debt (amount streamed but not withdrawn)
+            let total_debt = self._total_debt(stream_id);
+
+            // Calculate amounts for recipient and sender
+            let amount_due_to_recipient = if total_debt > stream.withdrawn_amount {
+                total_debt - stream.withdrawn_amount
+            } else {
+                0_u256
+            };
+
+            let refundable_amount = if stream_balance > total_debt {
+                stream_balance - total_debt
+            } else {
+                0_u256
+            };
+
+            // === REENTRANCY PROTECTION: Update ALL state before external calls ===
+
+            // Update the stream status to canceled
+            stream.status = StreamStatus::Canceled;
+
+            // Update stream balance and withdrawn amount
+            if amount_due_to_recipient > 0 {
+                stream.withdrawn_amount += amount_due_to_recipient;
+                stream.balance -= amount_due_to_recipient;
+            }
+
+            // Update aggregate balance
+            let total_amount_to_transfer = amount_due_to_recipient + refundable_amount;
+            if total_amount_to_transfer > 0 {
+                let aggregate_balance = self.aggregate_balance.read(token_address)
+                    - total_amount_to_transfer;
+                self.aggregate_balance.write(token_address, aggregate_balance);
+            }
+
+            // Update stream metrics for recipient payment
+            if amount_due_to_recipient > 0 {
+                let mut metrics = self.stream_metrics.read(stream_id);
+                metrics.total_withdrawn += amount_due_to_recipient;
+                metrics.withdrawal_count += 1;
+                metrics.last_activity = get_block_timestamp();
+                self.stream_metrics.write(stream_id, metrics);
+            }
+
+            // Update final snapshot
+            self._update_snapshot(stream_id);
+
+            let stream_sender = stream.sender;
+
+            // Write updated stream state
+            self.streams.write(stream_id, stream);
+
+            // Burn the NFT
+            self.erc721.burn(stream_id);
+
+            // === ALL STATE UPDATES COMPLETE - NOW SAFE TO MAKE EXTERNAL CALLS ===
+
+            let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
+
+            // Pay recipient their due amount (with protocol fee)
+            if amount_due_to_recipient > 0 {
+                let fee = self._calculate_protocol_fee(amount_due_to_recipient, token_address);
+                let net_amount = amount_due_to_recipient - fee;
+
+                // Transfer fee to collector and net amount to recipient
+                self._collect_protocol_fee_internal(token_address, fee);
+                token_dispatcher.transfer(recipient, net_amount);
+
+                // Emit withdrawal event
+                self
+                    .emit(
+                        StreamWithdrawn {
+                            stream_id,
+                            recipient,
+                            amount: net_amount,
+                            protocol_fee: fee.try_into().unwrap(),
+                        },
+                    );
+            }
+
+            // Refund excess to sender
+            if refundable_amount > 0 {
+                token_dispatcher.transfer(stream_sender, refundable_amount);
+                self
+                    .emit(
+                        RefundFromStream {
+                            stream_id, sender: stream_sender, amount: refundable_amount,
+                        },
+                    );
+            }
+
+            // Emit cancellation event
+            self.emit(StreamCanceled { stream_id });
+        }
     }
 
     #[abi(embed_v0)]
@@ -966,134 +1130,59 @@ pub mod PaymentStream {
             self.emit(StreamPaused { stream_id, pause_time: pause_time });
         }
 
+
         fn cancel(ref self: ContractState, stream_id: u256) {
             self.reentrancy_guard.start();
-
             // Ensure the caller is the stream sender
             self.assert_stream_sender_access(stream_id);
+            // Verify the stream is cancelable
+            let stream = self.streams.read(stream_id);
+            assert(stream.cancelable, NON_TRANSFERABLE_STREAM);
 
-            // Retrieve the stream
-            let mut stream = self.streams.read(stream_id);
+            self._cancel_internal(stream_id);
+            self.reentrancy_guard.end();
+        }
 
-            let stream_balance = stream.balance;
-            let token_address = stream.token;
-            let recipient = stream.recipient;
-
-            // Ensure the stream is active before cancellation
+        fn cancel_consensual(ref self: ContractState, stream_id: u256, signature: Array<felt252>) {
+            self.reentrancy_guard.start();
             self.assert_stream_exists(stream_id);
 
-            // Only decrement counter if stream was active
-            if stream.status == StreamStatus::Active {
-                let protocol_metrics = self.protocol_metrics.read();
-                self
-                    .protocol_metrics
-                    .write(
-                        ProtocolMetrics {
-                            total_active_streams: protocol_metrics.total_active_streams - 1,
-                            total_tokens_to_stream: protocol_metrics.total_tokens_to_stream,
-                            total_streams_created: protocol_metrics.total_streams_created,
-                            total_delegations: protocol_metrics.total_delegations,
-                        },
-                    );
-            }
+            let stream = self.streams.read(stream_id);
+            let caller = get_caller_address();
+            let sender = stream.sender;
+            let recipient = stream.recipient;
 
-            // Update snapshot before calculations
-            self._update_snapshot(stream_id);
-
-            // Calculate total debt (amount streamed but not withdrawn)
-            let total_debt = self._total_debt(stream_id);
-
-            // Calculate amounts for recipient and sender
-            let amount_due_to_recipient = if total_debt > stream.withdrawn_amount {
-                total_debt - stream.withdrawn_amount
+            // Identify the signer (counterparty)
+            let signer = if caller == sender {
+                recipient
+            } else if caller == recipient {
+                sender
             } else {
-                0_u256
+                // Determine if caller is a delegate or NFT owner
+                let nft_owner = self.erc721.owner_of(stream_id);
+                // If caller is NFT owner (and not sender), the counterparty is sender
+                if caller == nft_owner {
+                    sender
+                } else {
+                    panic!("Unauthorized caller")
+                }
             };
 
-            let refundable_amount = if stream_balance > total_debt {
-                stream_balance - total_debt
-            } else {
-                0_u256
-            };
+            // Construct the message
+            let request = CancelRequest { stream_id };
 
-            // === REENTRANCY PROTECTION: Update ALL state before external calls ===
+            // Compute the hash
+            let hash = request.get_message_hash(signer);
 
-            // Update the stream status to canceled
-            stream.status = StreamStatus::Canceled;
+            // Verify signature against the signer (counterparty)
+            let is_valid = ISRC6Dispatcher { contract_address: signer }
+                .is_valid_signature(hash, signature);
+            assert(is_valid == 'VALID', 'Invalid signature');
 
-            // Update stream balance and withdrawn amount
-            if amount_due_to_recipient > 0 {
-                stream.withdrawn_amount += amount_due_to_recipient;
-                stream.balance -= amount_due_to_recipient;
-            }
+            // Proceed with cancellation
+            self._cancel_internal(stream_id);
 
-            // Update aggregate balance
-            let total_amount_to_transfer = amount_due_to_recipient + refundable_amount;
-            if total_amount_to_transfer > 0 {
-                let aggregate_balance = self.aggregate_balance.read(token_address)
-                    - total_amount_to_transfer;
-                self.aggregate_balance.write(token_address, aggregate_balance);
-            }
-
-            // Update stream metrics for recipient payment
-            if amount_due_to_recipient > 0 {
-                let mut metrics = self.stream_metrics.read(stream_id);
-                metrics.total_withdrawn += amount_due_to_recipient;
-                metrics.withdrawal_count += 1;
-                metrics.last_activity = get_block_timestamp();
-                self.stream_metrics.write(stream_id, metrics);
-            }
-
-            // Update final snapshot
-            self._update_snapshot(stream_id);
-
-            let stream_sender = stream.sender;
-
-            // Write updated stream state
-            self.streams.write(stream_id, stream);
-
-            // Burn the NFT
-            self.erc721.burn(stream_id);
-
-            // === ALL STATE UPDATES COMPLETE - NOW SAFE TO MAKE EXTERNAL CALLS ===
-
-            let token_dispatcher = IERC20Dispatcher { contract_address: token_address };
-
-            // Pay recipient their due amount (with protocol fee)
-            if amount_due_to_recipient > 0 {
-                let fee = self._calculate_protocol_fee(amount_due_to_recipient, token_address);
-                let net_amount = amount_due_to_recipient - fee;
-
-                // Transfer fee to collector and net amount to recipient
-                self._collect_protocol_fee_internal(token_address, fee);
-                token_dispatcher.transfer(recipient, net_amount);
-
-                // Emit withdrawal event
-                self
-                    .emit(
-                        StreamWithdrawn {
-                            stream_id,
-                            recipient,
-                            amount: net_amount,
-                            protocol_fee: fee.try_into().unwrap(),
-                        },
-                    );
-            }
-
-            // Refund excess to sender
-            if refundable_amount > 0 {
-                token_dispatcher.transfer(stream_sender, refundable_amount);
-                self
-                    .emit(
-                        RefundFromStream {
-                            stream_id, sender: stream_sender, amount: refundable_amount,
-                        },
-                    );
-            }
-
-            // Emit cancellation event
-            self.emit(StreamCanceled { stream_id });
-
+            self.emit(ConsensualCancel { stream_id, caller, signer });
             self.reentrancy_guard.end();
         }
 
