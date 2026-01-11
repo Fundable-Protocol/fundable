@@ -230,6 +230,12 @@ pub trait ICampaignDonation<TContractState> {
     // / * Refund must not have been claimed already
     fn claim_refund(ref self: TContractState, campaign_id: u256);
 
+
+    fn batch_donate(
+        ref self: TContractState,
+        campaign_amounts: Array<(u256, u256)> // Array of (campaign_id, amount)
+    );
+
     // *************************************************************************
     //                        PROTOCOL FEES
     // *************************************************************************
